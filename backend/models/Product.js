@@ -7,7 +7,17 @@ const ProductSchema = new mongoose.Schema({
   quantity: { type: Number, required: true },
   location: { type: String, required: true },
   image: { type: String, default: '' },
-  description: { type: String }
+  media: [{ type: String }],
+  description: { type: String },
+  category: { 
+    type: String, 
+    enum: ['Vegetables', 'Fruits', 'Anaj', 'Daal', 'Masala', 'Damaged', 'Other'],
+    default: 'Other'
+  },
+  subCategory: { type: String },
+  isDamaged: { type: Boolean, default: false },
+  lastNegotiatedPrice: { type: Number, default: null },
+  contactNumber: { type: String, default: '' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Product', ProductSchema);

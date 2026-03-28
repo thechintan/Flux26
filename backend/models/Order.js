@@ -6,7 +6,10 @@ const OrderSchema = new mongoose.Schema({
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
   quantity: { type: Number, required: true },
   price: { type: Number, required: true },
-  status: { type: String, enum: ['Order placed', 'Packed', 'In transit', 'Delivered'], default: 'Order placed' }
+  status: { type: String, enum: ['Order placed', 'Packed', 'In transit', 'Delivered'], default: 'Order placed' },
+  issueStatus: { type: String, enum: ['None', 'Raised', 'Resolved_Discount', 'Resolved_Refund', 'Rejected'], default: 'None' },
+  issueReason: { type: String },
+  resolutionAmount: { type: Number, default: 0 }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Order', OrderSchema);

@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import ProductDetail from './pages/ProductDetail';
+import Footer from './components/Footer';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 
@@ -23,9 +24,7 @@ function App() {
               <Route path="/product/:id" element={<ProductDetail />} />
             </Routes>
           </main>
-          <footer className="glass py-6 text-center text-slate-400 text-sm mt-auto border-t border-slate-700/50">
-            <p>© {new Date().getFullYear()} Smart Agri Supply Network. Empowering Farmers & Buyers.</p>
-          </footer>
+            <Footer />
         </div>
         </Router>
       </AuthProvider>

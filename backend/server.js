@@ -2,23 +2,27 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const path = require('path');
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/product');
 const orderRoutes = require('./routes/order');
-const chatRoutes = require('./routes/chat'); // Added chatRoutes
+const chatRoutes = require('./routes/chat');
+const notificationRoutes = require('./routes/notification');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
-app.use('/api/chat', chatRoutes); // Added chat route
+app.use('/api/chat', chatRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // AI logic mock endpoint
 app.post('/api/ai/suggest-price', (req, res) => {
@@ -44,9 +48,9 @@ const seedDatabase = async () => {
       await farmer.save();
       await buyer.save();
       
-      const p1 = new Product({ farmer: farmer._id, name: 'Organic Wheat', price: 25, quantity: 1500, location: 'Punjab, India', image: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=500&q=80', description: 'Premium quality organic wheat directly from farms.' });
-      const p2 = new Product({ farmer: farmer._id, name: 'Fresh Tomatoes', price: 40, quantity: 50, location: 'Haryana, India', image: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&q=80', description: 'Fresh red tomatoes, perfect for cooking.' });
-      const p3 = new Product({ farmer: farmer._id, name: 'Basmati Rice', price: 75, quantity: 400, location: 'Punjab, India', image: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500&q=80', description: 'Export quality long-grain Basmati.' });
+      const p1 = new Product({ farmer: farmer._id, name: 'Organic Wheat', price: 25, quantity: 1500, location: 'Punjab, India', image: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=500&q=80', description: 'Premium quality organic wheat directly from farms.', category: 'Anaj' });
+      const p2 = new Product({ farmer: farmer._id, name: 'Fresh Tomatoes', price: 40, quantity: 50, location: 'Haryana, India', image: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&q=80', description: 'Fresh red tomatoes, perfect for cooking.', category: 'Vegetables' });
+      const p3 = new Product({ farmer: farmer._id, name: 'Basmati Rice', price: 75, quantity: 400, location: 'Punjab, India', image: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500&q=80', description: 'Export quality long-grain Basmati.', category: 'Anaj' });
       
       await Promise.all([p1.save(), p2.save(), p3.save()]);
       console.log('Database seeding completed successfully.');
