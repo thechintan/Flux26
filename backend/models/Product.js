@@ -11,13 +11,14 @@ const ProductSchema = new mongoose.Schema({
   description: { type: String },
   category: { 
     type: String, 
-    enum: ['Vegetables', 'Fruits', 'Anaj', 'Daal', 'Masala', 'Damaged', 'Other'],
+    enum: ['Vegetables', 'Fruits', 'Grains', 'Lentils', 'Spices', 'Damaged/Unsold', 'Other'],
     default: 'Other'
   },
   subCategory: { type: String },
   isDamaged: { type: Boolean, default: false },
   lastNegotiatedPrice: { type: Number, default: null },
-  contactNumber: { type: String, default: '' }
+  contactNumber: { type: String, default: '' },
+  isActive: { type: Boolean, default: true }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Product', ProductSchema);

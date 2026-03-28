@@ -110,6 +110,19 @@ export const apiService = {
       resolve({ data: order });
     }, MOCK_DELAY));
   },
+  createBulkOrders: async (items) => {
+    if(!useMock) return api.post('/orders/bulk', { items });
+    return new Promise(resolve => setTimeout(() => {
+      const newOrders = [];
+      items.forEach(item => {
+        const order = { ...item, _id: Date.now().toString() + Math.random(), status: 'Order placed', date: new Date().toISOString() };
+        mockData.orders.push(order);
+        newOrders.push(order);
+      });
+      saveMock();
+      resolve({ data: { count: newOrders.length, ordersCreated: newOrders } });
+    }, MOCK_DELAY));
+  },
   updateOrderStatus: async (orderId, status) => {
     if(!useMock) return api.put(`/orders/${orderId}/status`, { status });
     return new Promise(resolve => setTimeout(() => {
@@ -130,6 +143,10 @@ export const apiService = {
     return new Promise(resolve => setTimeout(() => {
       resolve({ data: { issueStatus: actionType } });
     }, MOCK_DELAY));
+  },
+  rateOrder: async (orderId, rating, comment) => {
+    if(!useMock) return api.post(`/orders/${orderId}/rate`, { rating, comment });
+    return Promise.resolve({ data: { msg: 'Rated' } });
   },
 
   // AI Mock

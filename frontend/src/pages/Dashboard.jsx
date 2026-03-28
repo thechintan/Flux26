@@ -1,9 +1,10 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { PackageSearch, PlusCircle, LayoutList, IndianRupee, Truck, Calendar, Sparkles, MessageCircle, Send, ChevronRight, CheckCircle, Upload, AlertTriangle, Link as LinkIcon, XCircle, CreditCard, Edit3, Trash2, ShoppingCart } from 'lucide-react';
+import { PackageSearch, PlusCircle, LayoutList, IndianRupee, Truck, Calendar, Sparkles, MessageCircle, Send, ChevronRight, CheckCircle, Upload, AlertTriangle, Link as LinkIcon, XCircle, CreditCard, Edit3, Trash2, ShoppingCart, Download, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import apiService from '../services/api';
 import { Link } from 'react-router-dom';
+import Rating from '../components/Rating';
 
 const Dashboard = () => {
   const { user } = useContext(AuthContext);
@@ -20,8 +21,9 @@ const Dashboard = () => {
   const scrollRef = useRef(null);
 
   // New Product Form State
-  const [newProduct, setNewProduct] = useState({ name: '', price: '', quantity: '', location: '', description: '', category: 'Vegetables', subCategory: '', isDamaged: false, contactNumber: '' });
-  const [mediaFiles, setMediaFiles] = useState([]);
+  const [newProduct, setNewProduct] = useState({ name: '', price: '', quantity: '', location: '', description: '', category: 'Vegetables', subCategory: '', isDamaged: false, contactNumber: '', legalConsent: false });
+  const [photoFiles, setPhotoFiles] = useState([]);
+  const [videoFiles, setVideoFiles] = useState([]);
   const [issuePhotos, setIssuePhotos] = useState([]);
   const [showMapPicker, setShowMapPicker] = useState(false);
 
@@ -84,6 +86,18 @@ const Dashboard = () => {
 
   const handleAddProduct = async (e) => {
     e.preventDefault();
+
+    if (!newProduct.legalConsent) {
+      return alert('You must agree to our Anti-Scam Legal Terms and certify media authenticity before listing.');
+    }
+
+    if (photoFiles.length === 0) {
+      return alert('📸 You must upload at least one PHOTO of your crop!');
+    }
+    if (videoFiles.length === 0) {
+      return alert('🎥 You must upload at least one VIDEO of your crop!');
+    }
+
     try {
       const formData = new FormData();
       formData.append('name', newProduct.name);
@@ -95,14 +109,19 @@ const Dashboard = () => {
       formData.append('subCategory', newProduct.subCategory);
       formData.append('isDamaged', newProduct.isDamaged);
       formData.append('contactNumber', newProduct.contactNumber);
-      for (let i = 0; i < mediaFiles.length; i++) {
-        formData.append('media', mediaFiles[i]);
+      // Photos first, then videos — so buyer sees images before video
+      for (let i = 0; i < photoFiles.length; i++) {
+        formData.append('media', photoFiles[i]);
+      }
+      for (let i = 0; i < videoFiles.length; i++) {
+        formData.append('media', videoFiles[i]);
       }
 
       await apiService.addProduct(formData);
       setActiveTab('listings');
-      setNewProduct({ name: '', price: '', quantity: '', location: '', description: '', category: 'Vegetables', subCategory: '', isDamaged: false, contactNumber: '' });
-      setMediaFiles([]);
+      setNewProduct({ name: '', price: '', quantity: '', location: '', description: '', category: 'Vegetables', subCategory: '', isDamaged: false, contactNumber: '', legalConsent: false });
+      setPhotoFiles([]);
+      setVideoFiles([]);
       fetchDashboardData();
     } catch (err) {
       console.error(err);
@@ -293,6 +312,79 @@ const Dashboard = () => {
     } catch(err) { console.error(err); }
   }
 
+  const handleRateOrder = async (orderId, rating, comment) => {
+    try {
+      await apiService.rateOrder(orderId, rating, comment);
+      fetchDashboardData();
+      alert('Rating submitted successfully!');
+    } catch (err) {
+      console.error(err);
+      alert(err?.response?.data?.msg || 'Failed to submit rating.');
+    }
+  };
+
+  const generatePDF = (order) => {
+    const element = document.createElement('div');
+    element.innerHTML = `
+      <div style="font-family: Arial, sans-serif; padding: 40px; color: #333; max-width: 800px; margin: 0 auto;">
+        <div style="border-bottom: 2px solid #22c55e; padding-bottom: 20px; margin-bottom: 30px;">
+          <h1 style="color: #22c55e; margin: 0; font-size: 28px;">SmartAgri Invoice</h1>
+          <p style="margin: 5px 0 0 0; color: #666;">Order ID: ${order._id}</p>
+          <p style="margin: 5px 0 0 0; color: #666;">Date: ${new Date().toLocaleDateString()}</p>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; margin-bottom: 40px;">
+          <div>
+            <h3 style="margin-top: 0;">Billed To:</h3>
+            <p><strong>Name:</strong> ${user.role === 'buyer' ? user.name : (order.buyer?.name || 'Buyer')}</p>
+          </div>
+          <div style="text-align: right;">
+            <h3 style="margin-top: 0;">Seller Details:</h3>
+            <p><strong>Name:</strong> ${user.role === 'farmer' ? user.name : (order.farmer?.name || 'Farmer')}</p>
+          </div>
+        </div>
+        
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px;">
+          <thead>
+            <tr style="background-color: #f8fafc;">
+              <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0;">Product</th>
+              <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e2e8f0;">Qty (KG)</th>
+              <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e2e8f0;">Price/KG</th>
+              <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e2e8f0;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">${order.product?.name || 'Agricultural Produce'}</td>
+              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">${order.quantity}</td>
+              <td style="padding: 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">Rs. ${order.price}</td>
+              <td style="padding: 12px; text-align: right; border-bottom: 1px solid #e2e8f0; font-weight: bold;">Rs. ${order.quantity * order.price}</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <div style="text-align: right; margin-bottom: 40px;">
+          <h2 style="color: #22c55e;">Grand Total: Rs. ${order.quantity * order.price}</h2>
+        </div>
+        
+        <div style="text-align: center; color: #666; font-size: 14px; margin-top: 50px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+          <p>Thank you for using SmartAgri for your wholesale agricultural needs!</p>
+          <p>This is a computer-generated receipt.</p>
+        </div>
+      </div>
+    `;
+
+    if (window.html2pdf) {
+      window.html2pdf()
+        .from(element)
+        .save(`SmartAgri_Invoice_${order._id.slice(-6)}.pdf`);
+    } else {
+      alert("PDF library is loading. Please reload the page or try again in a few seconds.");
+    }
+  };
+
+  const [ratingData, setRatingData] = useState({ orderId: null, rating: 0, comment: '' });
+
   if (!user) return <div className="text-center py-20">Loading...</div>;
 
   return (
@@ -459,10 +551,21 @@ const Dashboard = () => {
                  </div>
                </div>
 
-               <div>
-                 <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block flex items-center gap-2"><Upload size={16}/> Upload Product Photos/Videos</label>
-                 <input type="file" multiple accept="image/*,video/*" onChange={(e) => setMediaFiles(Array.from(e.target.files))} className="input-field !py-3 bg-slate-50 dark:bg-dark-900 border-dashed border-2 hover:border-primary-500 cursor-pointer" />
-                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 font-medium tracking-wide">Select multiple photos or quick videos showing crop quality to build buyer trust.</p>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                 {/* PHOTO Upload Box */}
+                 <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-xl hover:border-blue-500 transition-colors">
+                   <label className="text-sm font-bold text-blue-700 dark:text-blue-400 mb-2 block flex items-center gap-2">📸 Upload Product Photos <span className="text-red-500">*</span></label>
+                   <input type="file" multiple accept="image/*" onChange={(e) => setPhotoFiles(Array.from(e.target.files))} className="input-field !py-2.5 !text-sm bg-white dark:bg-dark-900 cursor-pointer" />
+                   {photoFiles.length > 0 && <p className="text-xs text-green-600 mt-2 font-bold flex items-center gap-1"><CheckCircle size={12}/> {photoFiles.length} photo(s) selected</p>}
+                   {photoFiles.length === 0 && <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 font-medium">Upload clear, unedited photos of the actual crop batch.</p>}
+                 </div>
+                 {/* VIDEO Upload Box */}
+                 <div className="p-4 bg-purple-50/50 dark:bg-purple-900/10 border-2 border-dashed border-purple-300 dark:border-purple-700 rounded-xl hover:border-purple-500 transition-colors">
+                   <label className="text-sm font-bold text-purple-700 dark:text-purple-400 mb-2 block flex items-center gap-2">🎥 Upload Product Video <span className="text-red-500">*</span></label>
+                   <input type="file" multiple accept="video/*" onChange={(e) => setVideoFiles(Array.from(e.target.files))} className="input-field !py-2.5 !text-sm bg-white dark:bg-dark-900 cursor-pointer" />
+                   {videoFiles.length > 0 && <p className="text-xs text-green-600 mt-2 font-bold flex items-center gap-1"><CheckCircle size={12}/> {videoFiles.length} video(s) selected</p>}
+                   {videoFiles.length === 0 && <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 font-medium">Record a short video showing crop quality, volume and handling.</p>}
+                 </div>
                </div>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -510,6 +613,21 @@ const Dashboard = () => {
                <div>
                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Description (optional)</label>
                  <textarea className="input-field h-24 resize-none" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} placeholder="Describe quality, variety, farming methods..." />
+               </div>
+
+               <div className="p-4 bg-red-50/50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30 rounded-xl mt-4">
+                 <label className="flex items-start gap-3 cursor-pointer group">
+                   <div className={`mt-0.5 w-6 h-6 rounded flex-shrink-0 flex items-center justify-center border-2 transition-all ${newProduct.legalConsent ? 'bg-primary-600 border-primary-600 text-white shadow-lg shadow-primary-500/30' : 'bg-white dark:bg-dark-900 border-red-300 dark:border-red-700 group-hover:border-red-500'}`}>
+                     {newProduct.legalConsent && <CheckCircle size={14} strokeWidth={4} />}
+                   </div>
+                   <input type="checkbox" className="hidden" checked={newProduct.legalConsent} onChange={(e) => setNewProduct({...newProduct, legalConsent: e.target.checked})} />
+                   <div className="flex flex-col">
+                     <span className="font-bold text-slate-900 dark:text-white text-sm">Strict Anti-Fraud Legal Agreement</span>
+                     <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mt-1">
+                       I certify the underlying photos/videos are 100% authentic and represent the exact wholesale batch. I acknowledge that posting deceptive media or attempting fraud will result in severe legal action, heavy deductions/fines from payouts, and permanent deregistration.
+                     </p>
+                   </div>
+                 </label>
                </div>
 
                <button type="submit" className="btn-primary w-full py-3.5 mt-2 font-bold text-lg">
@@ -611,9 +729,9 @@ const Dashboard = () => {
                           
                           {user.role === 'farmer' && o.issueStatus === 'Raised' && (
                             <div className="flex flex-wrap gap-2 mt-2">
-                              <button onClick={() => handleResolveIssue(o._id, 'Resolved_Discount')} className="btn-secondary !text-xs !py-1.5 !px-3 font-bold border-yellow-400 text-yellow-700 hover:bg-yellow-100">Offer Partial Refund</button>
-                              <button onClick={() => handleResolveIssue(o._id, 'Resolved_Refund')} className="btn-secondary !text-xs !py-1.5 !px-3 font-bold border-red-400 text-red-700 hover:bg-red-100">Full Refund / Cancel</button>
-                              <button onClick={() => handleResolveIssue(o._id, 'Rejected')} className="btn-secondary !text-xs !py-1.5 !px-3 font-bold border-slate-300">Reject Claim</button>
+                              <button onClick={() => handleResolveIssue(o._id, 'Resolved_Discount')} className="btn-secondary !text-xs !py-1.5 !px-3 font-bold border-yellow-400 text-yellow-700 hover:bg-yellow-100">Accept Fine / Reduce Invoice Price</button>
+                              <button onClick={() => handleResolveIssue(o._id, 'Resolved_Refund')} className="btn-secondary !text-xs !py-1.5 !px-3 font-bold border-red-400 text-red-700 hover:bg-red-100">Full Payment Refund & Cancel Contract</button>
+                              <button onClick={() => handleResolveIssue(o._id, 'Rejected')} className="btn-secondary !text-xs !py-1.5 !px-3 font-bold border-slate-300">Reject Fraud Claim</button>
                             </div>
                           )}
                        </div>
@@ -654,6 +772,33 @@ const Dashboard = () => {
                                 <div className="absolute inset-0 bg-white/20 w-full h-full animate-[shimmer_2s_infinite]"></div>
                             </div>
                        </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center flex-wrap gap-2">
+                      <button onClick={() => generatePDF(o)} className="btn-secondary !text-xs !py-1.5 flex items-center gap-1.5 shadow-sm"><Download size={14}/> Download Receipt</button>
+                      
+                      {o.status === 'Delivered' && (
+                         <div className="flex gap-2 items-center bg-white dark:bg-dark-800 border border-slate-200 dark:border-slate-700/50 p-2 rounded-lg shadow-sm">
+                           <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Rate {user.role === 'buyer' ? 'Seller' : 'Buyer'}:</span>
+                           <Rating 
+                             value={(user.role === 'buyer' ? o.isFarmerRated : o.isBuyerRated) ? 5 : ratingData.orderId === o._id ? ratingData.rating : 0} 
+                             readonly={user.role === 'buyer' ? o.isFarmerRated : o.isBuyerRated}
+                             onChange={(val) => setRatingData({...ratingData, orderId: o._id, rating: val})}
+                             maxStars={5} 
+                           />
+                           {ratingData.orderId === o._id && ratingData.rating > 0 && !(user.role === 'buyer' ? o.isFarmerRated : o.isBuyerRated) && (
+                             <button onClick={() => {
+                                 const comment = prompt("Optional: Write a review message");
+                                 handleRateOrder(o._id, ratingData.rating, comment || '');
+                               }} 
+                               className="bg-primary-600 text-white text-[10px] uppercase font-bold px-2 py-1 rounded hover:bg-primary-700 ml-2"
+                             >
+                               Submit
+                             </button>
+                           )}
+                           {(user.role === 'buyer' ? o.isFarmerRated : o.isBuyerRated) && <span className="text-[10px] text-green-600 font-bold ml-1 flex items-center gap-1"><CheckCircle size={12}/> Rated</span>}
+                         </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -716,11 +861,13 @@ const Dashboard = () => {
                      const offerMsg = [...(activeChat.messages || [])].reverse().find(m => m.text.includes('SYSTEM_ACTION:MAKE_OFFER'));
                      const priceM = offerMsg?.text.match(/PRICE:(\d+)/);
                      const qtyM = offerMsg?.text.match(/QTY:(\d+)/);
+                     const contactM = offerMsg?.text.match(/CONTACT:([^|]+)/);
                      return (
                        <div className="bg-yellow-50 dark:bg-yellow-900/30 border-b border-yellow-200 dark:border-yellow-700/50 p-3 px-5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-inner">
                          <div>
                             <p className="font-bold text-yellow-800 dark:text-yellow-400 flex items-center gap-1.5"><ShoppingCart size={16} /> Buyer Offer Received</p>
                             <p className="text-xs text-yellow-700 dark:text-yellow-500 font-medium mt-1">₹{priceM?.[1]}/kg × {qtyM?.[1]}kg = ₹{(Number(priceM?.[1]||0)*Number(qtyM?.[1]||0)).toLocaleString()}</p>
+                            {contactM && <p className="text-xs text-yellow-800 dark:text-yellow-400 font-bold mt-1 tracking-wide">📞 Buyer Contact: {contactM[1]}</p>}
                          </div>
                          <div className="flex gap-2 shrink-0">
                            <button onClick={handleAcceptOffer} className="btn-primary !bg-green-600 hover:!bg-green-700 text-xs !py-2 px-4 flex items-center gap-1.5 shadow-lg"><CheckCircle size={14} /> Accept</button>
@@ -796,9 +943,12 @@ const Dashboard = () => {
                               isMe ? 'bg-primary-600 text-white rounded-2xl rounded-tr-none' : 'bg-white dark:bg-dark-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-none text-slate-800 dark:text-slate-200'
                             }`}>
                                <span className="break-words font-medium">{msg.text}</span>
-                               <span className={`text-[9px] mt-1.5 font-bold tracking-widest uppercase ${isMe ? 'text-primary-200' : 'text-slate-400'} ${isMe ? 'text-right' : 'text-left'}`}>
-                                 {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                               </span>
+                               <div className={`flex items-center gap-1.5 mt-1.5 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                 <span className={`text-[9px] font-bold tracking-widest uppercase ${isMe ? 'text-primary-200' : 'text-slate-400'}`}>
+                                   {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                 </span>
+                                 {isMe && <span title="WhatsApp Notification Delivered" className="text-[9px] font-bold tracking-wider text-green-300 flex items-center gap-0.5 bg-green-500/20 px-1 rounded"><CheckCircle size={9}/> WA Sent</span>}
+                               </div>
                             </div>
                          </div>
                        )

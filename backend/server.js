@@ -39,6 +39,8 @@ const Product = require('./models/Product');
 const User = require('./models/User');
 const bcrypt = require('bcryptjs');
 
+const seedData = require('./seedData');
+
 const seedDatabase = async () => {
     const userCount = await User.countDocuments();
     if (userCount === 0) {
@@ -48,12 +50,10 @@ const seedDatabase = async () => {
       await farmer.save();
       await buyer.save();
       
-      const p1 = new Product({ farmer: farmer._id, name: 'Organic Wheat', price: 25, quantity: 1500, location: 'Punjab, India', image: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=500&q=80', description: 'Premium quality organic wheat directly from farms.', category: 'Anaj' });
-      const p2 = new Product({ farmer: farmer._id, name: 'Fresh Tomatoes', price: 40, quantity: 50, location: 'Haryana, India', image: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&q=80', description: 'Fresh red tomatoes, perfect for cooking.', category: 'Vegetables' });
-      const p3 = new Product({ farmer: farmer._id, name: 'Basmati Rice', price: 75, quantity: 400, location: 'Punjab, India', image: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=500&q=80', description: 'Export quality long-grain Basmati.', category: 'Anaj' });
+      const insertOperations = seedData.map(p => new Product({ ...p, farmer: farmer._id }));
+      await Product.insertMany(insertOperations);
       
-      await Promise.all([p1.save(), p2.save(), p3.save()]);
-      console.log('Database seeding completed successfully.');
+      console.log('Database seeding complete: Created 36 Sample Products.');
       console.log('----------------------------------------------------');
       console.log('Test Accounts available:');
       console.log('Farmer: farmer@test.com | Password: password');

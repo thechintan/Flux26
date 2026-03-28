@@ -11,7 +11,7 @@ const Auth = () => {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
-    name: '', email: '', password: '', role: 'buyer', location: ''
+    name: '', email: '', password: '', role: 'buyer', location: '', contactNumber: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -68,6 +68,7 @@ const Auth = () => {
           {!isLogin && (
             <div className="space-y-4">
               <input type="text" name="location" placeholder="City, State" className="input-field" onChange={handleChange} required />
+              <input type="tel" name="contactNumber" placeholder="Contact Number" className="input-field" onChange={handleChange} required />
               
               <div>
                 <label className="text-sm text-slate-600 dark:text-slate-400 mb-2 block font-medium">I am a:</label>
