@@ -4,6 +4,7 @@ import { PackageSearch, PlusCircle, LayoutList, IndianRupee, Truck, Calendar, Sp
 import { motion, AnimatePresence } from 'framer-motion';
 import apiService from '../services/api';
 import { Link } from 'react-router-dom';
+import PriceSuggestion from '../components/PriceSuggestion';
 
 const Dashboard = () => {
   const { user } = useContext(AuthContext);
@@ -452,6 +453,12 @@ const Dashboard = () => {
                  <div>
                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Unit Price (₹ / KG)</label>
                    <input required type="number" step="0.01" className="input-field text-xl font-mono text-primary-700 dark:text-primary-400" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} placeholder="0.00" />
+                   <PriceSuggestion 
+                     mainCategory={newProduct.category} 
+                     subCategory={newProduct.subCategory} 
+                     quantityKg={newProduct.quantity}
+                     onApplyPrice={(p) => setNewProduct(prev => ({...prev, price: p.toString()}))}
+                   />
                  </div>
                  <div>
                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">📞 Contact Number</label>
