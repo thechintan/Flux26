@@ -26,7 +26,7 @@ const upload = multer({ storage: storage });
 router.get('/', async (req, res) => {
   try {
     const { search, category, subCategory, isDamaged } = req.query;
-    let query = {};
+    let query = { isActive: true };
     
     if (search) {
       query.$or = [
@@ -38,8 +38,8 @@ router.get('/', async (req, res) => {
       ];
     }
     if (category) {
-      if (category.toLowerCase() === 'damaged') {
-        query.isDamaged = true; // "Damaged" is treated as a pseudo-category by the UI
+      if (category.toLowerCase() === 'damaged/unsold' || category.toLowerCase() === 'damaged') {
+        query.category = 'Damaged/Unsold';
       } else {
         query.category = new RegExp(`^${category}$`, 'i');
       }

@@ -2,12 +2,14 @@ import React, { useContext, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { ThemeContext } from '../context/ThemeContext';
-import { Leaf, UserCircle, LogOut, LayoutDashboard, Menu, X, Sun, Moon, ChevronLeft, Search } from 'lucide-react';
+import { CartContext } from '../context/CartContext';
+import { Leaf, UserCircle, LogOut, LayoutDashboard, Menu, X, Sun, Moon, ChevronLeft, Search, ShoppingCart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const Navbar = () => {
   const { user, isAuthenticated, logout } = useContext(AuthContext);
   const { theme, toggleTheme } = useContext(ThemeContext);
+  const { cart, setIsCartOpen } = useContext(CartContext);
   const navigate = useNavigate();
   const location = useLocation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -29,7 +31,7 @@ const Navbar = () => {
     }
   };
 
-  const categories = ['Vegetables', 'Fruits', 'Anaj', 'Daal', 'Masala'];
+  const categories = ['Vegetables', 'Fruits', 'Grains', 'Lentils', 'Spices'];
 
   return (
     <nav className="glass sticky top-0 z-50 flex flex-col transition-all">
@@ -83,7 +85,17 @@ const Navbar = () => {
                 Login
               </Link>
             ) : (
-              <div className="relative">
+              <div className="relative flex items-center gap-4">
+                {user.role === 'buyer' && (
+                  <button 
+                    onClick={() => setIsCartOpen(true)}
+                    className="relative p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors focus:outline-none rounded-full hover:bg-slate-100 dark:hover:bg-slate-800/80"
+                  >
+                    <ShoppingCart size={22} />
+                    {cart.length > 0 && <span className="absolute top-0 right-0 h-4 w-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full leading-none">{cart.length}</span>}
+                  </button>
+                )}
+                
                 <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
                   className="flex items-center gap-3 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none rounded-full p-1 bg-slate-50 hover:bg-slate-100 dark:bg-dark-800 dark:hover:bg-dark-700 border border-slate-200 dark:border-slate-700"
@@ -162,9 +174,9 @@ const Navbar = () => {
           </Link>
         ))}
         <div className="h-4 w-px bg-slate-300 dark:bg-slate-600"></div>
-        <Link to={`/?category=Damaged`} className="text-xs font-bold tracking-wider uppercase text-red-500 hover:text-red-600 transition-colors relative group flex items-center gap-1">
+        <Link to={`/?category=Damaged/Unsold`} className="text-xs font-bold tracking-wider uppercase text-red-500 hover:text-red-600 transition-colors relative group flex items-center gap-1">
           <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-          Damaged Deals
+          Damaged/Unsold
           <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-red-500 transition-all group-hover:w-full"></span>
         </Link>
       </div>
@@ -191,11 +203,11 @@ const Navbar = () => {
                   </Link>
                 ))}
                 <Link
-                  to={`/?category=Damaged`}
+                  to={`/?category=Damaged/Unsold`}
                   onClick={() => setMobileMenuOpen(false)}
                   className="px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-800/50 rounded-lg text-sm font-bold text-center uppercase tracking-wider shadow-sm"
                 >
-                  Damaged
+                  Damaged/Unsold
                 </Link>
               </div>
 
@@ -205,8 +217,13 @@ const Navbar = () => {
                 </Link>
               ) : (
                 <div className="space-y-2">
+                  {user.role === 'buyer' && (
+                    <button onClick={() => { setIsCartOpen(true); setMobileMenuOpen(false); }} className="flex items-center justify-center gap-2 btn-secondary w-full py-3 dark:border-slate-700">
+                      <ShoppingCart size={18} /> View Cart ({cart.length})
+                    </button>
+                  )}
                   <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-2 btn-secondary w-full py-3">
-                    <LayoutDashboard size={18} /> Farmer Dashboard
+                    <LayoutDashboard size={18} /> {user.role === 'farmer' ? 'Farmer' : 'My'} Dashboard
                   </Link>
                   <button onClick={() => { handleLogout(); setMobileMenuOpen(false); }} className="flex items-center justify-center gap-2 w-full py-3 text-red-500 bg-red-50 dark:bg-red-900/10 rounded-xl font-bold">
                     <LogOut size={18} /> Logout

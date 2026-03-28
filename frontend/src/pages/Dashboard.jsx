@@ -1,10 +1,11 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { PackageSearch, PlusCircle, LayoutList, IndianRupee, Truck, Calendar, Sparkles, MessageCircle, Send, ChevronRight, CheckCircle, Upload, AlertTriangle, Link as LinkIcon, XCircle, CreditCard, Edit3, Trash2, ShoppingCart } from 'lucide-react';
+import { PackageSearch, PlusCircle, LayoutList, IndianRupee, Truck, Calendar, Sparkles, MessageCircle, Send, ChevronRight, CheckCircle, Upload, AlertTriangle, Link as LinkIcon, XCircle, CreditCard, Edit3, Trash2, ShoppingCart, Download, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import apiService from '../services/api';
 import { Link } from 'react-router-dom';
 import PriceSuggestion from '../components/PriceSuggestion';
+import Rating from '../components/Rating';
 
 const Dashboard = () => {
   const { user } = useContext(AuthContext);
@@ -21,8 +22,9 @@ const Dashboard = () => {
   const scrollRef = useRef(null);
 
   // New Product Form State
-  const [newProduct, setNewProduct] = useState({ name: '', price: '', quantity: '', location: '', description: '', category: 'Vegetables', subCategory: '', isDamaged: false, contactNumber: '' });
-  const [mediaFiles, setMediaFiles] = useState([]);
+  const [newProduct, setNewProduct] = useState({ name: '', price: '', quantity: '', location: '', description: '', category: 'Vegetables', subCategory: '', isDamaged: false, contactNumber: '', legalConsent: false });
+  const [photoFiles, setPhotoFiles] = useState([]);
+  const [videoFiles, setVideoFiles] = useState([]);
   const [issuePhotos, setIssuePhotos] = useState([]);
   const [showMapPicker, setShowMapPicker] = useState(false);
 
@@ -53,10 +55,10 @@ const Dashboard = () => {
     try {
       const ordersRes = await apiService.getOrders(user.id || user._id, user.role);
       setOrders(ordersRes.data);
-      
+
       const chatsRes = await apiService.getMyChats();
       setMyChats(chatsRes.data);
-      
+
       const notifRes = await apiService.getNotifications();
       setNotifications(notifRes.data);
 
@@ -85,6 +87,18 @@ const Dashboard = () => {
 
   const handleAddProduct = async (e) => {
     e.preventDefault();
+
+    if (!newProduct.legalConsent) {
+      return alert('You must agree to our Anti-Scam Legal Terms and certify media authenticity before listing.');
+    }
+
+    if (photoFiles.length === 0) {
+      return alert('📸 You must upload at least one PHOTO of your crop!');
+    }
+    if (videoFiles.length === 0) {
+      return alert('🎥 You must upload at least one VIDEO of your crop!');
+    }
+
     try {
       const formData = new FormData();
       formData.append('name', newProduct.name);
@@ -96,14 +110,19 @@ const Dashboard = () => {
       formData.append('subCategory', newProduct.subCategory);
       formData.append('isDamaged', newProduct.isDamaged);
       formData.append('contactNumber', newProduct.contactNumber);
-      for (let i = 0; i < mediaFiles.length; i++) {
-        formData.append('media', mediaFiles[i]);
+      // Photos first, then videos — so buyer sees images before video
+      for (let i = 0; i < photoFiles.length; i++) {
+        formData.append('media', photoFiles[i]);
+      }
+      for (let i = 0; i < videoFiles.length; i++) {
+        formData.append('media', videoFiles[i]);
       }
 
       await apiService.addProduct(formData);
       setActiveTab('listings');
-      setNewProduct({ name: '', price: '', quantity: '', location: '', description: '', category: 'Vegetables', subCategory: '', isDamaged: false, contactNumber: '' });
-      setMediaFiles([]);
+      setNewProduct({ name: '', price: '', quantity: '', location: '', description: '', category: 'Vegetables', subCategory: '', isDamaged: false, contactNumber: '', legalConsent: false });
+      setPhotoFiles([]);
+      setVideoFiles([]);
       fetchDashboardData();
     } catch (err) {
       console.error(err);
@@ -165,7 +184,7 @@ const Dashboard = () => {
       const { data } = await apiService.sendMessage(activeChatId, sentText);
       setActiveChat(data);
       fetchDashboardData();
-    } catch(err) { console.error(err); }
+    } catch (err) { console.error(err); }
   };
 
   const handleAcceptOffer = async () => {
@@ -210,7 +229,7 @@ const Dashboard = () => {
     if (!paymentChat) return;
     if (paymentForm.method === 'card' && (!paymentForm.cardNumber || !paymentForm.expiry || !paymentForm.cvv)) return alert('Fill all card details.');
     if (paymentForm.method === 'upi' && !paymentForm.upiId) return alert('Enter UPI ID.');
-    
+
     // Parse price/qty from the accepted offer message
     const acceptMsg = [...(paymentChat.messages || [])].reverse().find(m => m.text.includes('SYSTEM_ACTION:OFFER_ACCEPTED'));
     const priceMatch = acceptMsg?.text.match(/PRICE:(\d+)/);
@@ -263,7 +282,7 @@ const Dashboard = () => {
 
   const [issueReason, setIssueReason] = useState('');
   const [activeIssueOrderId, setActiveIssueOrderId] = useState(null);
-  
+
   const handleRaiseIssue = async (orderId) => {
     if (!issueReason.trim()) return alert('Enter a reason');
     try {
@@ -278,35 +297,108 @@ const Dashboard = () => {
       setIssuePhotos([]);
       fetchDashboardData();
       alert('Issue reported with photo proof to the seller.');
-    } catch(err) { console.error(err); }
+    } catch (err) { console.error(err); }
   }
 
   const handleResolveIssue = async (orderId, actionType) => {
     let amount = 0;
     if (actionType === 'Resolved_Discount') {
-       amount = prompt("Enter the total discount / fine amount (₹) to deduct from the order:");
-       if (!amount || isNaN(amount)) return;
+      amount = prompt("Enter the total discount / fine amount (₹) to deduct from the order:");
+      if (!amount || isNaN(amount)) return;
     }
     try {
       await apiService.resolveOrderIssue(orderId, actionType, amount);
       fetchDashboardData();
       alert('Issue resolved officially.');
-    } catch(err) { console.error(err); }
+    } catch (err) { console.error(err); }
   }
+
+  const handleRateOrder = async (orderId, rating, comment) => {
+    try {
+      await apiService.rateOrder(orderId, rating, comment);
+      fetchDashboardData();
+      alert('Rating submitted successfully!');
+    } catch (err) {
+      console.error(err);
+      alert(err?.response?.data?.msg || 'Failed to submit rating.');
+    }
+  };
+
+  const generatePDF = (order) => {
+    const element = document.createElement('div');
+    element.innerHTML = `
+      <div style="font-family: Arial, sans-serif; padding: 40px; color: #333; max-width: 800px; margin: 0 auto;">
+        <div style="border-bottom: 2px solid #22c55e; padding-bottom: 20px; margin-bottom: 30px;">
+          <h1 style="color: #22c55e; margin: 0; font-size: 28px;">SmartAgri Invoice</h1>
+          <p style="margin: 5px 0 0 0; color: #666;">Order ID: ${order._id}</p>
+          <p style="margin: 5px 0 0 0; color: #666;">Date: ${new Date().toLocaleDateString()}</p>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; margin-bottom: 40px;">
+          <div>
+            <h3 style="margin-top: 0;">Billed To:</h3>
+            <p><strong>Name:</strong> ${user.role === 'buyer' ? user.name : (order.buyer?.name || 'Buyer')}</p>
+          </div>
+          <div style="text-align: right;">
+            <h3 style="margin-top: 0;">Seller Details:</h3>
+            <p><strong>Name:</strong> ${user.role === 'farmer' ? user.name : (order.farmer?.name || 'Farmer')}</p>
+          </div>
+        </div>
+        
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px;">
+          <thead>
+            <tr style="background-color: #f8fafc;">
+              <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0;">Product</th>
+              <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e2e8f0;">Qty (KG)</th>
+              <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e2e8f0;">Price/KG</th>
+              <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e2e8f0;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">${order.product?.name || 'Agricultural Produce'}</td>
+              <td style="padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">${order.quantity}</td>
+              <td style="padding: 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">Rs. ${order.price}</td>
+              <td style="padding: 12px; text-align: right; border-bottom: 1px solid #e2e8f0; font-weight: bold;">Rs. ${order.quantity * order.price}</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <div style="text-align: right; margin-bottom: 40px;">
+          <h2 style="color: #22c55e;">Grand Total: Rs. ${order.quantity * order.price}</h2>
+        </div>
+        
+        <div style="text-align: center; color: #666; font-size: 14px; margin-top: 50px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+          <p>Thank you for using SmartAgri for your wholesale agricultural needs!</p>
+          <p>This is a computer-generated receipt.</p>
+        </div>
+      </div>
+    `;
+
+    if (window.html2pdf) {
+      window.html2pdf()
+        .from(element)
+        .save(`SmartAgri_Invoice_${order._id.slice(-6)}.pdf`);
+    } else {
+      alert("PDF library is loading. Please reload the page or try again in a few seconds.");
+    }
+  };
+
+  const [ratingData, setRatingData] = useState({ orderId: null, rating: 0, comment: '' });
 
   if (!user) return <div className="text-center py-20">Loading...</div>;
 
   return (
     <div className="flex flex-col md:flex-row gap-8">
       {/* Sidebar Navigation */}
-      <motion.aside 
-        initial={{ x: -20, opacity: 0 }} 
+      <motion.aside
+        initial={{ x: -20, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         className="w-full md:w-64 space-y-2 flex flex-col"
       >
         <div className="glass-card p-6 mb-4 mt-2 bg-white/95 dark:bg-dark-800">
           <div className="flex flex-col items-center">
-            <img src={`https://api.dicebear.com/7.x/initials/svg?seed=${user.name}&backgroundColor=22c55e`} alt="av" className="w-20 h-20 rounded-full mb-3 shadow-[0_0_15px_rgba(34,197,94,0.3)]"/>
+            <img src={`https://api.dicebear.com/7.x/initials/svg?seed=${user.name}&backgroundColor=22c55e`} alt="av" className="w-20 h-20 rounded-full mb-3 shadow-[0_0_15px_rgba(34,197,94,0.3)]" />
             <h3 className="font-bold text-lg text-slate-900 dark:text-white">{user.name}</h3>
             <span className="badge mt-1 uppercase">{user.role}</span>
           </div>
@@ -335,16 +427,16 @@ const Dashboard = () => {
       </motion.aside>
 
       {/* Main Content Area */}
-      <motion.main 
+      <motion.main
         key={activeTab}
-        initial={{ opacity: 0, y: 10 }} 
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         className="flex-grow space-y-6"
       >
         {activeTab === 'overview' && (
           <div className="space-y-6">
             <h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary-600 to-green-500 dark:from-primary-400 dark:to-green-300">Dashboard Overview</h2>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="glass-card p-6 flex items-center justify-between bg-white/95 dark:bg-dark-800">
                 <div>
@@ -380,38 +472,38 @@ const Dashboard = () => {
             {/* Buyer Notifications Block */}
             {user.role === 'buyer' && myChats.some(c => c.messages.some(m => m.text.includes('SYSTEM_ACTION:OFFER_ACCEPTED'))) && (
               <div className="glass-card p-6 border-l-4 border-l-green-500 bg-white dark:bg-dark-800 shadow-md">
-                 <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-3"><CheckCircle className="text-green-500" size={20}/> Seller Accepted — Payment Required</h3>
-                 <div className="space-y-3">
-                   {myChats.filter(c => c.messages.some(m => m.text.includes('SYSTEM_ACTION:OFFER_ACCEPTED'))).map(c => {
-                     const acceptMsg = [...c.messages].reverse().find(m => m.text.includes('OFFER_ACCEPTED'));
-                     const priceMatch = acceptMsg?.text.match(/PRICE:(\d+)/);
-                     const qtyMatch = acceptMsg?.text.match(/QTY:(\d+)/);
-                     return (
-                       <div key={c._id} className="p-4 rounded-xl bg-green-50 dark:bg-green-900/10 flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-3"><CheckCircle className="text-green-500" size={20} /> Seller Accepted — Payment Required</h3>
+                <div className="space-y-3">
+                  {myChats.filter(c => c.messages.some(m => m.text.includes('SYSTEM_ACTION:OFFER_ACCEPTED'))).map(c => {
+                    const acceptMsg = [...c.messages].reverse().find(m => m.text.includes('OFFER_ACCEPTED'));
+                    const priceMatch = acceptMsg?.text.match(/PRICE:(\d+)/);
+                    const qtyMatch = acceptMsg?.text.match(/QTY:(\d+)/);
+                    return (
+                      <div key={c._id} className="p-4 rounded-xl bg-green-50 dark:bg-green-900/10 flex justify-between items-center">
                         <div>
                           <p className="font-bold text-slate-900 dark:text-white">Offer Accepted for <Link to={`/product/${c.productId._id}`} className="text-primary-600 hover:underline">{c.productId.name}</Link></p>
-                          <p className="text-sm font-medium text-slate-600 dark:text-slate-400">₹{priceMatch?.[1] || '?'}/kg × {qtyMatch?.[1] || '?'}kg = <strong>₹{(Number(priceMatch?.[1]||0) * Number(qtyMatch?.[1]||0)).toLocaleString()}</strong></p>
+                          <p className="text-sm font-medium text-slate-600 dark:text-slate-400">₹{priceMatch?.[1] || '?'}/kg × {qtyMatch?.[1] || '?'}kg = <strong>₹{(Number(priceMatch?.[1] || 0) * Number(qtyMatch?.[1] || 0)).toLocaleString()}</strong></p>
                         </div>
-                        <button onClick={() => openPaymentModal(c)} className="btn-primary py-2 px-5 !bg-green-600 hover:!bg-green-700 shadow-lg shadow-green-600/20 flex items-center gap-2"><CreditCard size={16}/> Pay Now</button>
+                        <button onClick={() => openPaymentModal(c)} className="btn-primary py-2 px-5 !bg-green-600 hover:!bg-green-700 shadow-lg shadow-green-600/20 flex items-center gap-2"><CreditCard size={16} /> Pay Now</button>
                       </div>
-                     );
-                   })}
-                 </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
-            
+
             <div className="glass-card p-6 bg-white/95 dark:bg-dark-800">
-              <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 dark:text-white"><Calendar size={20} className="text-primary-600 dark:text-primary-500"/> Recent Activity</h3>
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 dark:text-white"><Calendar size={20} className="text-primary-600 dark:text-primary-500" /> Recent Activity</h3>
               {orders.length === 0 ? <p className="text-slate-500 dark:text-slate-400 font-medium">No recent activity detected.</p> : (
                 <div className="space-y-4">
                   {orders.slice(0, 3).map((o, i) => (
-                     <div key={i} className="flex justify-between items-center bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-slate-700/50 p-4 rounded-xl">
-                       <div className="flex flex-col">
-                         <span className="font-bold text-slate-800 dark:text-slate-200">Order #{o._id?.slice(-6).toUpperCase()}</span>
-                         <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Status: {o.status}</span>
-                       </div>
-                       <span className="font-mono font-bold text-primary-600 dark:text-primary-400 flex items-center"><IndianRupee size={14}/>{o.price * o.quantity}</span>
-                     </div>
+                    <div key={i} className="flex justify-between items-center bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-slate-700/50 p-4 rounded-xl">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-800 dark:text-slate-200">Order #{o._id?.slice(-6).toUpperCase()}</span>
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Status: {o.status}</span>
+                      </div>
+                      <span className="font-mono font-bold text-primary-600 dark:text-primary-400 flex items-center"><IndianRupee size={14} />{o.price * o.quantity}</span>
+                    </div>
                   ))}
                 </div>
               )}
@@ -421,251 +513,303 @@ const Dashboard = () => {
 
         {activeTab === 'add' && user.role === 'farmer' && (
           <div className="glass-card p-8 relative overflow-hidden bg-white/95 dark:bg-dark-800">
-             <div className="absolute top-0 right-0 w-64 h-64 bg-primary-100 dark:bg-primary-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-             <h2 className="text-2xl font-bold mb-6 flex items-center text-slate-900 dark:text-white"><PlusCircle className="mr-3 text-primary-600 dark:text-primary-500" /> New Product Listing</h2>
-             
-             <form onSubmit={handleAddProduct} className="space-y-6 relative z-10">
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                 <div>
-                   <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Crop Name</label>
-                   <input required type="text" className="input-field" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="e.g. Organic Wheat" />
-                 </div>
-                 <div>
-                   <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Quantity (KG)</label>
-                   <input required type="number" min="1" className="input-field" value={newProduct.quantity} onChange={e => setNewProduct({...newProduct, quantity: e.target.value})} placeholder="e.g. 100" />
-                 </div>
-               </div>
+            <div className="absolute top-0 right-0 w-64 h-64 bg-primary-100 dark:bg-primary-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+            <h2 className="text-2xl font-bold mb-6 flex items-center text-slate-900 dark:text-white"><PlusCircle className="mr-3 text-primary-600 dark:text-primary-500" /> New Product Listing</h2>
 
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                 <div>
-                   <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Main Category</label>
-                   <select required className="input-field" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
-                     {['Vegetables', 'Fruits', 'Anaj', 'Daal', 'Masala', 'Damaged', 'Other'].map(c => <option key={c} value={c}>{c}</option>)}
-                   </select>
-                 </div>
-                 <div>
-                   <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Sub Category</label>
-                   <input type="text" className="input-field" value={newProduct.subCategory} onChange={e => setNewProduct({...newProduct, subCategory: e.target.value})} placeholder="e.g. Tomato, Potato, Basmati..." />
-                 </div>
-               </div>
-               
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                 <div>
-                   <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Unit Price (₹ / KG)</label>
-                   <input required type="number" step="0.01" className="input-field text-xl font-mono text-primary-700 dark:text-primary-400" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} placeholder="0.00" />
-                   <PriceSuggestion 
-                     mainCategory={newProduct.category} 
-                     subCategory={newProduct.subCategory} 
-                     quantityKg={newProduct.quantity}
-                     onApplyPrice={(p) => setNewProduct(prev => ({...prev, price: p.toString()}))}
-                   />
-                 </div>
-                 <div>
-                   <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">📞 Contact Number</label>
-                   <input required type="tel" className="input-field" value={newProduct.contactNumber} onChange={e => setNewProduct({...newProduct, contactNumber: e.target.value})} placeholder="e.g. +91 98765-43210" />
-                 </div>
-               </div>
+            <form onSubmit={handleAddProduct} className="space-y-6 relative z-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Crop Name</label>
+                  <input required type="text" className="input-field" value={newProduct.name} onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} placeholder="e.g. Organic Wheat" />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Quantity (KG)</label>
+                  <input required type="number" min="1" className="input-field" value={newProduct.quantity} onChange={e => setNewProduct({ ...newProduct, quantity: e.target.value })} placeholder="e.g. 100" />
+                </div>
+              </div>
 
-               <div>
-                 <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block flex items-center gap-2"><Upload size={16}/> Upload Product Photos/Videos</label>
-                 <input type="file" multiple accept="image/*,video/*" onChange={(e) => setMediaFiles(Array.from(e.target.files))} className="input-field !py-3 bg-slate-50 dark:bg-dark-900 border-dashed border-2 hover:border-primary-500 cursor-pointer" />
-                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 font-medium tracking-wide">Select multiple photos or quick videos showing crop quality to build buyer trust.</p>
-               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Main Category</label>
+                  <select required className="input-field" value={newProduct.category} onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}>
+                    {['Vegetables', 'Fruits', 'Anaj', 'Daal', 'Masala', 'Damaged', 'Other'].map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Sub Category</label>
+                  <input type="text" className="input-field" value={newProduct.subCategory} onChange={e => setNewProduct({ ...newProduct, subCategory: e.target.value })} placeholder="e.g. Tomato, Potato, Basmati..." />
+                </div>
+              </div>
 
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                 <div>
-                   <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">📍 Location</label>
-                   <input required type="text" className="input-field" value={newProduct.location} onChange={e => setNewProduct({...newProduct, location: e.target.value})} placeholder="e.g. Punjab, India" />
-                   <div className="flex gap-2 mt-2">
-                     <button type="button" onClick={handleGetCurrentLocation} className="text-xs font-bold text-primary-600 hover:text-primary-800 bg-primary-50 dark:bg-primary-900/20 px-3 py-1.5 rounded-lg border border-primary-200 dark:border-primary-800 flex items-center gap-1 transition-colors">📍 Use Live Location</button>
-                     <button type="button" onClick={handlePickLocation} className="text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1 transition-colors">🗺️ Pick on Map</button>
-                   </div>
-                 </div>
-                 <div className="flex items-center mt-6">
-                    <label className="flex items-center gap-3 cursor-pointer group">
-                      <div className={`w-6 h-6 rounded flex items-center justify-center border-2 transition-all ${newProduct.isDamaged ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-white dark:bg-dark-900 border-slate-300 dark:border-slate-700 group-hover:border-primary-400'}`}>
-                        {newProduct.isDamaged && <CheckCircle size={14} strokeWidth={4} />}
-                      </div>
-                      <input type="checkbox" className="hidden" checked={newProduct.isDamaged} onChange={(e) => setNewProduct({...newProduct, isDamaged: e.target.checked})} />
-                      <span className="font-bold text-slate-700 dark:text-slate-300 group-hover:text-red-500 transition-colors flex items-center gap-1"><AlertTriangle size={16} /> Mark as Damaged / Discount</span>
-                    </label>
-                 </div>
-               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Unit Price (₹ / KG)</label>
+                  <input required type="number" step="0.01" className="input-field text-xl font-mono text-primary-700 dark:text-primary-400" value={newProduct.price} onChange={e => setNewProduct({ ...newProduct, price: e.target.value })} placeholder="0.00" />
+                  <PriceSuggestion
+                    mainCategory={newProduct.category}
+                    subCategory={newProduct.subCategory}
+                    quantityKg={newProduct.quantity}
+                    onApplyPrice={(p) => setNewProduct(prev => ({ ...prev, price: p.toString() }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">📞 Contact Number</label>
+                  <input required type="tel" className="input-field" value={newProduct.contactNumber} onChange={e => setNewProduct({ ...newProduct, contactNumber: e.target.value })} placeholder="e.g. +91 98765-43210" />
+                </div>
+              </div>
 
-               {/* Map Picker Modal */}
-               {showMapPicker && (
-                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                   <div className="bg-white dark:bg-dark-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
-                     <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                       <h3 className="font-bold text-lg text-slate-900 dark:text-white">📍 Pick Location on Map</h3>
-                       <button onClick={() => setShowMapPicker(false)} className="text-slate-500 hover:text-slate-800 font-bold text-xl">✕</button>
-                     </div>
-                     <div className="p-4">
-                       <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">Click anywhere on the map to select your location. The full address will be auto-filled.</p>
-                       <iframe 
-                         src="https://www.openstreetmap.org/export/embed.html?bbox=68.0,6.5,97.5,37.5&layer=mapnik" 
-                         className="w-full h-[400px] rounded-xl border border-slate-200 dark:border-slate-700"
-                         title="Location Picker"
-                       ></iframe>
-                       <p className="text-xs text-slate-400 mt-2">For exact location, use the <strong>"Use Live Location"</strong> button which uses your device GPS.</p>
-                       <button onClick={() => { handleGetCurrentLocation(); setShowMapPicker(false); }} className="btn-primary w-full mt-3 py-2.5 font-bold">Use My Current GPS Location</button>
-                     </div>
-                   </div>
-                 </div>
-               )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* PHOTO Upload Box */}
+                <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-xl hover:border-blue-500 transition-colors">
+                  <label className="text-sm font-bold text-blue-700 dark:text-blue-400 mb-2 block flex items-center gap-2">📸 Upload Product Photos <span className="text-red-500">*</span></label>
+                  <input type="file" multiple accept="image/*" onChange={(e) => setPhotoFiles(Array.from(e.target.files))} className="input-field !py-2.5 !text-sm bg-white dark:bg-dark-900 cursor-pointer" />
+                  {photoFiles.length > 0 && <p className="text-xs text-green-600 mt-2 font-bold flex items-center gap-1"><CheckCircle size={12} /> {photoFiles.length} photo(s) selected</p>}
+                  {photoFiles.length === 0 && <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 font-medium">Upload clear, unedited photos of the actual crop batch.</p>}
+                </div>
+                {/* VIDEO Upload Box */}
+                <div className="p-4 bg-purple-50/50 dark:bg-purple-900/10 border-2 border-dashed border-purple-300 dark:border-purple-700 rounded-xl hover:border-purple-500 transition-colors">
+                  <label className="text-sm font-bold text-purple-700 dark:text-purple-400 mb-2 block flex items-center gap-2">🎥 Upload Product Video <span className="text-red-500">*</span></label>
+                  <input type="file" multiple accept="video/*" onChange={(e) => setVideoFiles(Array.from(e.target.files))} className="input-field !py-2.5 !text-sm bg-white dark:bg-dark-900 cursor-pointer" />
+                  {videoFiles.length > 0 && <p className="text-xs text-green-600 mt-2 font-bold flex items-center gap-1"><CheckCircle size={12} /> {videoFiles.length} video(s) selected</p>}
+                  {videoFiles.length === 0 && <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 font-medium">Record a short video showing crop quality, volume and handling.</p>}
+                </div>
+              </div>
 
-               <div>
-                 <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Description (optional)</label>
-                 <textarea className="input-field h-24 resize-none" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} placeholder="Describe quality, variety, farming methods..." />
-               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">📍 Location</label>
+                  <input required type="text" className="input-field" value={newProduct.location} onChange={e => setNewProduct({ ...newProduct, location: e.target.value })} placeholder="e.g. Punjab, India" />
+                  <div className="flex gap-2 mt-2">
+                    <button type="button" onClick={handleGetCurrentLocation} className="text-xs font-bold text-primary-600 hover:text-primary-800 bg-primary-50 dark:bg-primary-900/20 px-3 py-1.5 rounded-lg border border-primary-200 dark:border-primary-800 flex items-center gap-1 transition-colors">📍 Use Live Location</button>
+                    <button type="button" onClick={handlePickLocation} className="text-xs font-bold text-slate-600 hover:text-slate-800 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1 transition-colors">🗺️ Pick on Map</button>
+                  </div>
+                </div>
+                <div className="flex items-center mt-6">
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <div className={`w-6 h-6 rounded flex items-center justify-center border-2 transition-all ${newProduct.isDamaged ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-white dark:bg-dark-900 border-slate-300 dark:border-slate-700 group-hover:border-primary-400'}`}>
+                      {newProduct.isDamaged && <CheckCircle size={14} strokeWidth={4} />}
+                    </div>
+                    <input type="checkbox" className="hidden" checked={newProduct.isDamaged} onChange={(e) => setNewProduct({ ...newProduct, isDamaged: e.target.checked })} />
+                    <span className="font-bold text-slate-700 dark:text-slate-300 group-hover:text-red-500 transition-colors flex items-center gap-1"><AlertTriangle size={16} /> Mark as Damaged / Discount</span>
+                  </label>
+                </div>
+              </div>
 
-               <button type="submit" className="btn-primary w-full py-3.5 mt-2 font-bold text-lg">
-                 List Product on Marketplace
-               </button>
-             </form>
+              {/* Map Picker Modal */}
+              {showMapPicker && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <div className="bg-white dark:bg-dark-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
+                    <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                      <h3 className="font-bold text-lg text-slate-900 dark:text-white">📍 Pick Location on Map</h3>
+                      <button onClick={() => setShowMapPicker(false)} className="text-slate-500 hover:text-slate-800 font-bold text-xl">✕</button>
+                    </div>
+                    <div className="p-4">
+                      <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">Click anywhere on the map to select your location. The full address will be auto-filled.</p>
+                      <iframe
+                        src="https://www.openstreetmap.org/export/embed.html?bbox=68.0,6.5,97.5,37.5&layer=mapnik"
+                        className="w-full h-[400px] rounded-xl border border-slate-200 dark:border-slate-700"
+                        title="Location Picker"
+                      ></iframe>
+                      <p className="text-xs text-slate-400 mt-2">For exact location, use the <strong>"Use Live Location"</strong> button which uses your device GPS.</p>
+                      <button onClick={() => { handleGetCurrentLocation(); setShowMapPicker(false); }} className="btn-primary w-full mt-3 py-2.5 font-bold">Use My Current GPS Location</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-sm font-semibold text-slate-700 dark:text-slate-400 mb-1 block">Description (optional)</label>
+                <textarea className="input-field h-24 resize-none" value={newProduct.description} onChange={e => setNewProduct({ ...newProduct, description: e.target.value })} placeholder="Describe quality, variety, farming methods..." />
+              </div>
+
+              <div className="p-4 bg-red-50/50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30 rounded-xl mt-4">
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <div className={`mt-0.5 w-6 h-6 rounded flex-shrink-0 flex items-center justify-center border-2 transition-all ${newProduct.legalConsent ? 'bg-primary-600 border-primary-600 text-white shadow-lg shadow-primary-500/30' : 'bg-white dark:bg-dark-900 border-red-300 dark:border-red-700 group-hover:border-red-500'}`}>
+                    {newProduct.legalConsent && <CheckCircle size={14} strokeWidth={4} />}
+                  </div>
+                  <input type="checkbox" className="hidden" checked={newProduct.legalConsent} onChange={(e) => setNewProduct({ ...newProduct, legalConsent: e.target.checked })} />
+                  <div className="flex flex-col">
+                    <span className="font-bold text-slate-900 dark:text-white text-sm">Strict Anti-Fraud Legal Agreement</span>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mt-1">
+                      I certify the underlying photos/videos are 100% authentic and represent the exact wholesale batch. I acknowledge that posting deceptive media or attempting fraud will result in severe legal action, heavy deductions/fines from payouts, and permanent deregistration.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              <button type="submit" className="btn-primary w-full py-3.5 mt-2 font-bold text-lg">
+                List Product on Marketplace
+              </button>
+            </form>
           </div>
         )}
 
         {/* Listings components... */}
         {activeTab === 'listings' && user.role === 'farmer' && (
           <div className="glass-card p-8 bg-white/95 dark:bg-dark-800">
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-slate-900 dark:text-white"><PackageSearch className="text-primary-600 dark:text-primary-500"/> Managing My Produce</h2>
+            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-slate-900 dark:text-white"><PackageSearch className="text-primary-600 dark:text-primary-500" /> Managing My Produce</h2>
             <div className="space-y-4">
-               {myProducts.length === 0 ? <p className="text-slate-600 dark:text-slate-400 font-medium tracking-wide">You haven't listed any products yet. Time to sow the seed!</p> : myProducts.map(p => (
-                 <div key={p._id} className="bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-slate-700/50 p-4 rounded-xl flex items-center justify-between hover:border-primary-400 dark:hover:border-primary-500/30 transition-all">
-                   <div className="flex items-center gap-4">
-                     <img src={p.media && p.media.length ? `http://localhost:5000${p.media[0]}` : p.image || `https://images.unsplash.com/photo-1592924357228?w=200`} alt={p.name} className="w-16 h-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shadow-sm" />
-                     <div>
-                       <h4 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                         {p.name} 
-                         {p.isDamaged && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded-sm uppercase tracking-wider font-extrabold border border-red-200">Damaged</span>}
-                       </h4>
-                       <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{p.quantity} KG • {p.category}{p.subCategory ? ` > ${p.subCategory}` : ''}</p>
-                     </div>
-                   </div>
-                   <div className="text-right flex flex-col items-end gap-2">
-                     {editingProductId === p._id ? (
-                       <div className="flex items-center gap-2">
-                         <input type="number" value={editProductData.price} onChange={e => setEditProductData({...editProductData, price: e.target.value})} className="w-20 input-field !py-1 !text-sm" placeholder="Price" />
-                         <input type="number" value={editProductData.quantity} onChange={e => setEditProductData({...editProductData, quantity: e.target.value})} className="w-20 input-field !py-1 !text-sm" placeholder="Qty" />
-                         <button onClick={() => handleSaveProduct(p._id)} className="text-xs font-bold text-green-600 hover:text-green-800 border border-green-300 bg-green-50 rounded px-2 py-1"><CheckCircle size={14}/></button>
-                         <button onClick={() => setEditingProductId(null)} className="text-xs font-bold text-slate-500 hover:text-slate-700 border border-slate-300 rounded px-2 py-1"><XCircle size={14}/></button>
-                       </div>
-                     ) : (
-                       <>
-                         <span className="block font-bold text-primary-600 dark:text-primary-400 flex items-center justify-end"><IndianRupee size={16}/>{p.price}/kg</span>
-                         <div className="flex gap-1.5">
-                           <button onClick={() => handleEditProduct(p)} className="text-xs font-medium text-slate-500 hover:text-blue-600 border border-slate-300 dark:border-slate-700 bg-white dark:bg-dark-800 rounded px-2.5 py-1.5 transition-colors shadow-sm flex items-center gap-1"><Edit3 size={12}/> Edit</button>
-                           <button onClick={() => handleDeleteProduct(p._id)} className="text-xs font-medium text-red-500 hover:text-red-700 border border-red-200 dark:border-red-800 bg-white dark:bg-dark-800 rounded px-2.5 py-1.5 transition-colors shadow-sm flex items-center gap-1"><Trash2 size={12}/> Delete</button>
-                         </div>
-                       </>
-                     )}
-                   </div>
-                 </div>
-               ))}
+              {myProducts.length === 0 ? <p className="text-slate-600 dark:text-slate-400 font-medium tracking-wide">You haven't listed any products yet. Time to sow the seed!</p> : myProducts.map(p => (
+                <div key={p._id} className="bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-slate-700/50 p-4 rounded-xl flex items-center justify-between hover:border-primary-400 dark:hover:border-primary-500/30 transition-all">
+                  <div className="flex items-center gap-4">
+                    <img src={p.media && p.media.length ? `http://localhost:5000${p.media[0]}` : p.image || `https://images.unsplash.com/photo-1592924357228?w=200`} alt={p.name} className="w-16 h-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shadow-sm" />
+                    <div>
+                      <h4 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                        {p.name}
+                        {p.isDamaged && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded-sm uppercase tracking-wider font-extrabold border border-red-200">Damaged</span>}
+                      </h4>
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{p.quantity} KG • {p.category}{p.subCategory ? ` > ${p.subCategory}` : ''}</p>
+                    </div>
+                  </div>
+                  <div className="text-right flex flex-col items-end gap-2">
+                    {editingProductId === p._id ? (
+                      <div className="flex items-center gap-2">
+                        <input type="number" value={editProductData.price} onChange={e => setEditProductData({ ...editProductData, price: e.target.value })} className="w-20 input-field !py-1 !text-sm" placeholder="Price" />
+                        <input type="number" value={editProductData.quantity} onChange={e => setEditProductData({ ...editProductData, quantity: e.target.value })} className="w-20 input-field !py-1 !text-sm" placeholder="Qty" />
+                        <button onClick={() => handleSaveProduct(p._id)} className="text-xs font-bold text-green-600 hover:text-green-800 border border-green-300 bg-green-50 rounded px-2 py-1"><CheckCircle size={14} /></button>
+                        <button onClick={() => setEditingProductId(null)} className="text-xs font-bold text-slate-500 hover:text-slate-700 border border-slate-300 rounded px-2 py-1"><XCircle size={14} /></button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="block font-bold text-primary-600 dark:text-primary-400 flex items-center justify-end"><IndianRupee size={16} />{p.price}/kg</span>
+                        <div className="flex gap-1.5">
+                          <button onClick={() => handleEditProduct(p)} className="text-xs font-medium text-slate-500 hover:text-blue-600 border border-slate-300 dark:border-slate-700 bg-white dark:bg-dark-800 rounded px-2.5 py-1.5 transition-colors shadow-sm flex items-center gap-1"><Edit3 size={12} /> Edit</button>
+                          <button onClick={() => handleDeleteProduct(p._id)} className="text-xs font-medium text-red-500 hover:text-red-700 border border-red-200 dark:border-red-800 bg-white dark:bg-dark-800 rounded px-2.5 py-1.5 transition-colors shadow-sm flex items-center gap-1"><Trash2 size={12} /> Delete</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
         {/* Orders Logisitcs component */}
         {activeTab === 'orders' && (
-           <div className="glass-card p-8 min-h-[500px] bg-white/95 dark:bg-dark-800">
-             <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-slate-900 dark:text-white"><Truck className="text-primary-600 dark:text-primary-500" /> Logistics & Orders</h2>
-             <div className="space-y-4">
-                {orders.length === 0 ? <p className="text-slate-600 dark:text-slate-400 font-medium w-full text-center mt-20">No active orders found.</p> : orders.map(o => (
-                  <div key={o._id} className="bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-slate-700 p-5 rounded-xl transition-all shadow-sm">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                      <div>
-                        <div className="flex items-center gap-3 mb-2">
-                          <h4 className="font-bold text-lg text-slate-900 dark:text-white">Order #{o._id?.slice(-6).toUpperCase()}</h4>
-                          <span className={`badge ${o.status === 'Delivered' ? 'bg-green-100 border-green-200 text-green-700 dark:bg-green-500/10 dark:border-green-500/20 dark:text-green-400' : 'bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-400'}`}>
-                            {o.status}
-                          </span>
-                        </div>
-                        <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Amount: <strong className="text-slate-900 dark:text-white font-bold tracking-tight">₹{o.quantity * o.price}</strong> ({o.quantity}kg @ ₹{o.price}/kg)</p>
+          <div className="glass-card p-8 min-h-[500px] bg-white/95 dark:bg-dark-800">
+            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-slate-900 dark:text-white"><Truck className="text-primary-600 dark:text-primary-500" /> Logistics & Orders</h2>
+            <div className="space-y-4">
+              {orders.length === 0 ? <p className="text-slate-600 dark:text-slate-400 font-medium w-full text-center mt-20">No active orders found.</p> : orders.map(o => (
+                <div key={o._id} className="bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-slate-700 p-5 rounded-xl transition-all shadow-sm">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                      <div className="flex items-center gap-3 mb-2">
+                        <h4 className="font-bold text-lg text-slate-900 dark:text-white">Order #{o._id?.slice(-6).toUpperCase()}</h4>
+                        <span className={`badge ${o.status === 'Delivered' ? 'bg-green-100 border-green-200 text-green-700 dark:bg-green-500/10 dark:border-green-500/20 dark:text-green-400' : 'bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-500/10 dark:border-blue-500/20 dark:text-blue-400'}`}>
+                          {o.status}
+                        </span>
                       </div>
-                      
-                      {user.role === 'farmer' && o.status !== 'Delivered' && (
-                        <div className="flex gap-2">
-                           <select 
-                            className="input-field py-1.5 font-semibold text-sm bg-white dark:bg-dark-900 shadow-sm border-slate-300 dark:border-slate-600 border"
-                            value={o.status}
-                            onChange={(e) => updateOrderStatus(o._id, e.target.value)}
-                           >
-                              <option value="Order placed">Order Confirmed</option>
-                              <option value="Packed">Packed</option>
-                              <option value="In transit">Out for Delivery</option>
-                              <option value="Delivered">Delivered Done</option>
-                           </select>
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Amount: <strong className="text-slate-900 dark:text-white font-bold tracking-tight">₹{o.quantity * o.price}</strong> ({o.quantity}kg @ ₹{o.price}/kg)</p>
+                    </div>
+
+                    {user.role === 'farmer' && o.status !== 'Delivered' && (
+                      <div className="flex gap-2">
+                        <select
+                          className="input-field py-1.5 font-semibold text-sm bg-white dark:bg-dark-900 shadow-sm border-slate-300 dark:border-slate-600 border"
+                          value={o.status}
+                          onChange={(e) => updateOrderStatus(o._id, e.target.value)}
+                        >
+                          <option value="Order placed">Order Confirmed</option>
+                          <option value="Packed">Packed</option>
+                          <option value="In transit">Out for Delivery</option>
+                          <option value="Delivered">Delivered Done</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Dispute Status Block */}
+                  {o.issueStatus && o.issueStatus !== 'None' && (
+                    <div className={`mt-4 p-3 rounded-lg border flex flex-col gap-2 ${o.issueStatus === 'Raised' ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-900/30' :
+                      'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/10 dark:border-yellow-900/30'
+                      }`}>
+                      <div className="flex items-center gap-2 font-bold text-sm">
+                        {o.issueStatus === 'Raised' ? <AlertTriangle className="text-red-600" size={16} /> : <CheckCircle className="text-yellow-600" size={16} />}
+                        <span className={o.issueStatus === 'Raised' ? 'text-red-700 dark:text-red-400' : 'text-yellow-700 dark:text-yellow-400'}>
+                          {o.issueStatus === 'Raised' ? 'Quality Issue / Scam Reported' : `Issue Completed: ${o.issueStatus.replace('Resolved_', '')}`}
+                        </span>
+                      </div>
+
+                      {o.issueReason && <p className="text-xs text-slate-600 dark:text-slate-400 font-medium bg-white/50 dark:bg-dark-900/50 p-2 rounded border border-slate-100 dark:border-slate-800">"{o.issueReason}"</p>}
+
+                      {user.role === 'farmer' && o.issueStatus === 'Raised' && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <button onClick={() => handleResolveIssue(o._id, 'Resolved_Discount')} className="btn-secondary !text-xs !py-1.5 !px-3 font-bold border-yellow-400 text-yellow-700 hover:bg-yellow-100">Accept Fine / Reduce Invoice Price</button>
+                          <button onClick={() => handleResolveIssue(o._id, 'Resolved_Refund')} className="btn-secondary !text-xs !py-1.5 !px-3 font-bold border-red-400 text-red-700 hover:bg-red-100">Full Payment Refund & Cancel Contract</button>
+                          <button onClick={() => handleResolveIssue(o._id, 'Rejected')} className="btn-secondary !text-xs !py-1.5 !px-3 font-bold border-slate-300">Reject Fraud Claim</button>
                         </div>
                       )}
                     </div>
+                  )}
 
-                    {/* Dispute Status Block */}
-                    {o.issueStatus && o.issueStatus !== 'None' && (
-                       <div className={`mt-4 p-3 rounded-lg border flex flex-col gap-2 ${
-                         o.issueStatus === 'Raised' ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-900/30' : 
-                         'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/10 dark:border-yellow-900/30'
-                       }`}>
-                          <div className="flex items-center gap-2 font-bold text-sm">
-                            {o.issueStatus === 'Raised' ? <AlertTriangle className="text-red-600" size={16}/> : <CheckCircle className="text-yellow-600" size={16}/>}
-                            <span className={o.issueStatus === 'Raised' ? 'text-red-700 dark:text-red-400' : 'text-yellow-700 dark:text-yellow-400'}>
-                              {o.issueStatus === 'Raised' ? 'Quality Issue / Scam Reported' : `Issue Completed: ${o.issueStatus.replace('Resolved_', '')}`}
-                            </span>
+                  {/* Buyer Report Button */}
+                  {user.role === 'buyer' && o.status !== 'Order placed' && (!o.issueStatus || o.issueStatus === 'None') && (
+                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                      {activeIssueOrderId === o._id ? (
+                        <div className="flex flex-col gap-2">
+                          <input type="text" value={issueReason} onChange={e => setIssueReason(e.target.value)} placeholder="Describe the issue (e.g., Damaged goods, rotten, not as described)" className="input-field !text-sm !py-2" />
+                          <div>
+                            <label className="text-xs font-bold text-red-600 mb-1 block">📸 Upload Photo Proof</label>
+                            <input type="file" multiple accept="image/*" onChange={(e) => setIssuePhotos(Array.from(e.target.files))} className="input-field !text-xs !py-1.5 bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800 border-dashed border-2" />
+                            {issuePhotos.length > 0 && <p className="text-xs text-green-600 mt-1 font-medium">✓ {issuePhotos.length} photo(s) selected</p>}
                           </div>
-                          
-                          {o.issueReason && <p className="text-xs text-slate-600 dark:text-slate-400 font-medium bg-white/50 dark:bg-dark-900/50 p-2 rounded border border-slate-100 dark:border-slate-800">"{o.issueReason}"</p>}
-                          
-                          {user.role === 'farmer' && o.issueStatus === 'Raised' && (
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              <button onClick={() => handleResolveIssue(o._id, 'Resolved_Discount')} className="btn-secondary !text-xs !py-1.5 !px-3 font-bold border-yellow-400 text-yellow-700 hover:bg-yellow-100">Offer Partial Refund</button>
-                              <button onClick={() => handleResolveIssue(o._id, 'Resolved_Refund')} className="btn-secondary !text-xs !py-1.5 !px-3 font-bold border-red-400 text-red-700 hover:bg-red-100">Full Refund / Cancel</button>
-                              <button onClick={() => handleResolveIssue(o._id, 'Rejected')} className="btn-secondary !text-xs !py-1.5 !px-3 font-bold border-slate-300">Reject Claim</button>
-                            </div>
-                          )}
-                       </div>
-                    )}
+                          <div className="flex gap-2">
+                            <button onClick={() => handleRaiseIssue(o._id)} className="btn-primary !bg-red-600 hover:!bg-red-700 !text-xs !py-1.5 w-auto px-4 shadow-red-500/20 shadow-lg">Submit Report</button>
+                            <button onClick={() => { setActiveIssueOrderId(null); setIssueReason(''); setIssuePhotos([]); }} className="btn-secondary !text-xs !py-1.5">Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button onClick={() => setActiveIssueOrderId(o._id)} className="text-xs font-bold text-red-500 hover:text-red-700 transition-colors flex items-center gap-1"><AlertTriangle size={14} /> Report Quality Issue / Fraud</button>
+                      )}
+                    </div>
+                  )}
 
-                    {/* Buyer Report Button */}
-                    {user.role === 'buyer' && o.status !== 'Order placed' && (!o.issueStatus || o.issueStatus === 'None') && (
-                      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                        {activeIssueOrderId === o._id ? (
-                          <div className="flex flex-col gap-2">
-                            <input type="text" value={issueReason} onChange={e => setIssueReason(e.target.value)} placeholder="Describe the issue (e.g., Damaged goods, rotten, not as described)" className="input-field !text-sm !py-2" />
-                            <div>
-                              <label className="text-xs font-bold text-red-600 mb-1 block">📸 Upload Photo Proof</label>
-                              <input type="file" multiple accept="image/*" onChange={(e) => setIssuePhotos(Array.from(e.target.files))} className="input-field !text-xs !py-1.5 bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800 border-dashed border-2" />
-                              {issuePhotos.length > 0 && <p className="text-xs text-green-600 mt-1 font-medium">✓ {issuePhotos.length} photo(s) selected</p>}
-                            </div>
-                            <div className="flex gap-2">
-                              <button onClick={() => handleRaiseIssue(o._id)} className="btn-primary !bg-red-600 hover:!bg-red-700 !text-xs !py-1.5 w-auto px-4 shadow-red-500/20 shadow-lg">Submit Report</button>
-                              <button onClick={() => { setActiveIssueOrderId(null); setIssueReason(''); setIssuePhotos([]); }} className="btn-secondary !text-xs !py-1.5">Cancel</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button onClick={() => setActiveIssueOrderId(o._id)} className="text-xs font-bold text-red-500 hover:text-red-700 transition-colors flex items-center gap-1"><AlertTriangle size={14}/> Report Quality Issue / Fraud</button>
-                        )}
+                  <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800">
+                    <div className="flex justify-between text-[11px] font-extrabold text-slate-400 dark:text-slate-500 mb-2 relative px-2 tracking-wider text-center uppercase">
+                      <span className={o.status === "Order placed" || o.status === "Packed" || o.status === "In transit" || o.status === "Delivered" ? "text-primary-600 dark:text-primary-400" : ""}>Confirmed</span>
+                      <span className={o.status === "Packed" || o.status === "In transit" || o.status === "Delivered" ? "text-primary-600 dark:text-primary-400" : ""}>Packed</span>
+                      <span className={o.status === "In transit" || o.status === "Delivered" ? "text-primary-600 dark:text-primary-400" : ""}>On Delivery</span>
+                      <span className={o.status === "Delivered" ? "text-primary-600 dark:text-primary-400" : ""}>Done</span>
+                    </div>
+                    <div className="w-full h-3 bg-slate-200 dark:bg-dark-800 rounded-full overflow-hidden shadow-inner">
+                      <div className="h-full bg-gradient-to-r from-primary-600 to-green-400 transition-all duration-1000 ease-out relative"
+                        style={{ width: o.status === 'Delivered' ? '100%' : o.status === 'In transit' ? '75%' : o.status === 'Packed' ? '50%' : '25%' }}>
+                        <div className="absolute inset-0 bg-white/20 w-full h-full animate-[shimmer_2s_infinite]"></div>
                       </div>
-                    )}
-
-                    <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800">
-                       <div className="flex justify-between text-[11px] font-extrabold text-slate-400 dark:text-slate-500 mb-2 relative px-2 tracking-wider text-center uppercase">
-                           <span className={o.status === "Order placed" || o.status === "Packed" || o.status === "In transit" || o.status === "Delivered" ? "text-primary-600 dark:text-primary-400" : ""}>Confirmed</span>
-                           <span className={o.status === "Packed" || o.status === "In transit" || o.status === "Delivered" ? "text-primary-600 dark:text-primary-400" : ""}>Packed</span>
-                           <span className={o.status === "In transit" || o.status === "Delivered" ? "text-primary-600 dark:text-primary-400" : ""}>On Delivery</span>
-                           <span className={o.status === "Delivered" ? "text-primary-600 dark:text-primary-400" : ""}>Done</span>
-                       </div>
-                       <div className="w-full h-3 bg-slate-200 dark:bg-dark-800 rounded-full overflow-hidden shadow-inner">
-                           <div className="h-full bg-gradient-to-r from-primary-600 to-green-400 transition-all duration-1000 ease-out relative" 
-                                style={{ width: o.status === 'Delivered' ? '100%' : o.status === 'In transit' ? '75%' : o.status === 'Packed' ? '50%' : '25%' }}>
-                                <div className="absolute inset-0 bg-white/20 w-full h-full animate-[shimmer_2s_infinite]"></div>
-                            </div>
-                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-           </div>
+
+                  <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center flex-wrap gap-2">
+                    <button onClick={() => generatePDF(o)} className="btn-secondary !text-xs !py-1.5 flex items-center gap-1.5 shadow-sm"><Download size={14} /> Download Receipt</button>
+
+                    {o.status === 'Delivered' && (
+                      <div className="flex gap-2 items-center bg-white dark:bg-dark-800 border border-slate-200 dark:border-slate-700/50 p-2 rounded-lg shadow-sm">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Rate {user.role === 'buyer' ? 'Seller' : 'Buyer'}:</span>
+                        <Rating
+                          value={(user.role === 'buyer' ? o.isFarmerRated : o.isBuyerRated) ? 5 : ratingData.orderId === o._id ? ratingData.rating : 0}
+                          readonly={user.role === 'buyer' ? o.isFarmerRated : o.isBuyerRated}
+                          onChange={(val) => setRatingData({ ...ratingData, orderId: o._id, rating: val })}
+                          maxStars={5}
+                        />
+                        {ratingData.orderId === o._id && ratingData.rating > 0 && !(user.role === 'buyer' ? o.isFarmerRated : o.isBuyerRated) && (
+                          <button onClick={() => {
+                            const comment = prompt("Optional: Write a review message");
+                            handleRateOrder(o._id, ratingData.rating, comment || '');
+                          }}
+                            className="bg-primary-600 text-white text-[10px] uppercase font-bold px-2 py-1 rounded hover:bg-primary-700 ml-2"
+                          >
+                            Submit
+                          </button>
+                        )}
+                        {(user.role === 'buyer' ? o.isFarmerRated : o.isBuyerRated) && <span className="text-[10px] text-green-600 font-bold ml-1 flex items-center gap-1"><CheckCircle size={12} /> Rated</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Chattings / Inbox */}
@@ -674,7 +818,7 @@ const Dashboard = () => {
             {/* Chats List Sidebar */}
             <div className={`w-full md:w-1/3 border-r border-slate-200 dark:border-slate-700/50 flex flex-col ${activeChatId ? 'hidden md:flex' : 'flex'}`}>
               <div className="p-4 border-b border-slate-200 dark:border-slate-700/50 bg-slate-50 dark:bg-dark-900 border-t border-l">
-                <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2"><MessageCircle size={20} className="text-primary-600 dark:text-primary-500"/> Negotiations</h3>
+                <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2"><MessageCircle size={20} className="text-primary-600 dark:text-primary-500" /> Negotiations</h3>
               </div>
               <div className="flex-grow overflow-y-auto custom-scrollbar">
                 {myChats.length === 0 ? <p className="p-6 text-center text-slate-500 text-sm font-medium">No active negotiations in your inbox.</p> : myChats.map(c => {
@@ -683,8 +827,8 @@ const Dashboard = () => {
                   // Clean preview: don't show raw SYSTEM_ACTION text
                   const preview = lastMsg.startsWith('SYSTEM_ACTION:') ? (lastMsg.includes('MAKE_OFFER') ? '📦 Formal Offer Sent' : lastMsg.includes('ACCEPTED') ? '✅ Offer Accepted' : lastMsg.includes('DENIED') ? '❌ Offer Denied' : lastMsg.includes('RE_OFFER') ? '🏷️ Re-offer Sent' : 'System Message') : lastMsg;
                   return (
-                    <button 
-                      key={c._id} 
+                    <button
+                      key={c._id}
                       onClick={() => { setActiveChatId(c._id); setActiveChat(c); }}
                       className={`w-full text-left p-4 border-b border-slate-100 dark:border-slate-700/30 transition-all hover:bg-slate-50 dark:hover:bg-slate-700/20 ${activeChatId === c._id ? 'bg-primary-50 dark:bg-primary-500/10 border-l-4 border-l-primary-500 text-primary-900' : ''}`}
                     >
@@ -698,7 +842,7 @@ const Dashboard = () => {
                 })}
               </div>
             </div>
-            
+
             {/* Active Chat Thread */}
             <div className={`w-full md:w-2/3 flex flex-col bg-slate-50/50 dark:bg-dark-900/50 ${!activeChatId ? 'hidden md:flex items-center justify-center' : 'flex'}`}>
               {!activeChatId ? (
@@ -710,7 +854,7 @@ const Dashboard = () => {
                 <>
                   <div className="p-4 border-b border-slate-200 dark:border-slate-700/50 bg-white dark:bg-dark-800 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <button onClick={() => setActiveChatId(null)} className="md:hidden p-2 bg-slate-100 dark:bg-slate-700 rounded-full mr-2"><ChevronRight className="rotate-180" size={16}/></button>
+                      <button onClick={() => setActiveChatId(null)} className="md:hidden p-2 bg-slate-100 dark:bg-slate-700 rounded-full mr-2"><ChevronRight className="rotate-180" size={16} /></button>
                       <div>
                         <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">{activeChat?.productId?.name} <LinkIcon size={14} className="text-slate-400" /></h4>
                         <p className="text-xs text-primary-600 font-bold tracking-wider uppercase mt-1">Chatting with {user.role === 'farmer' ? activeChat?.buyerId?.name : activeChat?.farmerId?.name}</p>
@@ -720,107 +864,111 @@ const Dashboard = () => {
 
                   {/* Context Sensitive Notification Banners */}
                   {user.role === 'farmer' && activeChat?.messages?.some(m => m.text.includes('SYSTEM_ACTION:MAKE_OFFER')) && !activeChat?.messages?.some(m => m.text.includes('SYSTEM_ACTION:OFFER_ACCEPTED') || m.text.includes('SYSTEM_ACTION:OFFER_DENIED')) && (() => {
-                     const offerMsg = [...(activeChat.messages || [])].reverse().find(m => m.text.includes('SYSTEM_ACTION:MAKE_OFFER'));
-                     const priceM = offerMsg?.text.match(/PRICE:(\d+)/);
-                     const qtyM = offerMsg?.text.match(/QTY:(\d+)/);
-                     return (
-                       <div className="bg-yellow-50 dark:bg-yellow-900/30 border-b border-yellow-200 dark:border-yellow-700/50 p-3 px-5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-inner">
-                         <div>
-                            <p className="font-bold text-yellow-800 dark:text-yellow-400 flex items-center gap-1.5"><ShoppingCart size={16} /> Buyer Offer Received</p>
-                            <p className="text-xs text-yellow-700 dark:text-yellow-500 font-medium mt-1">₹{priceM?.[1]}/kg × {qtyM?.[1]}kg = ₹{(Number(priceM?.[1]||0)*Number(qtyM?.[1]||0)).toLocaleString()}</p>
-                         </div>
-                         <div className="flex gap-2 shrink-0">
-                           <button onClick={handleAcceptOffer} className="btn-primary !bg-green-600 hover:!bg-green-700 text-xs !py-2 px-4 flex items-center gap-1.5 shadow-lg"><CheckCircle size={14} /> Accept</button>
-                           <button onClick={handleDenyOffer} className="btn-primary !bg-red-600 hover:!bg-red-700 text-xs !py-2 px-4 flex items-center gap-1.5 shadow-lg"><XCircle size={14} /> Deny</button>
-                         </div>
-                       </div>
-                     );
+                    const offerMsg = [...(activeChat.messages || [])].reverse().find(m => m.text.includes('SYSTEM_ACTION:MAKE_OFFER'));
+                    const priceM = offerMsg?.text.match(/PRICE:(\d+)/);
+                    const qtyM = offerMsg?.text.match(/QTY:(\d+)/);
+                    const contactM = offerMsg?.text.match(/CONTACT:([^|]+)/);
+                    return (
+                      <div className="bg-yellow-50 dark:bg-yellow-900/30 border-b border-yellow-200 dark:border-yellow-700/50 p-3 px-5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-inner">
+                        <div>
+                          <p className="font-bold text-yellow-800 dark:text-yellow-400 flex items-center gap-1.5"><ShoppingCart size={16} /> Buyer Offer Received</p>
+                          <p className="text-xs text-yellow-700 dark:text-yellow-500 font-medium mt-1">₹{priceM?.[1]}/kg × {qtyM?.[1]}kg = ₹{(Number(priceM?.[1] || 0) * Number(qtyM?.[1] || 0)).toLocaleString()}</p>
+                          {contactM && <p className="text-xs text-yellow-800 dark:text-yellow-400 font-bold mt-1 tracking-wide">📞 Buyer Contact: {contactM[1]}</p>}
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          <button onClick={handleAcceptOffer} className="btn-primary !bg-green-600 hover:!bg-green-700 text-xs !py-2 px-4 flex items-center gap-1.5 shadow-lg"><CheckCircle size={14} /> Accept</button>
+                          <button onClick={handleDenyOffer} className="btn-primary !bg-red-600 hover:!bg-red-700 text-xs !py-2 px-4 flex items-center gap-1.5 shadow-lg"><XCircle size={14} /> Deny</button>
+                        </div>
+                      </div>
+                    );
                   })()}
 
                   {user.role === 'buyer' && activeChat?.messages?.some(m => m.text.includes('SYSTEM_ACTION:OFFER_ACCEPTED')) && (
-                     <div className="bg-green-50 dark:bg-green-900/30 border-b border-green-200 dark:border-green-700/50 p-3 px-5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-inner">
-                        <div>
-                           <p className="font-bold text-green-800 dark:text-green-400 flex items-center gap-1.5"><CheckCircle size={16} /> Seller Accepted Your Offer!</p>
-                           <p className="text-xs text-green-700 dark:text-green-500 font-medium mt-1">Complete payment to finalize your order.</p>
-                        </div>
-                        <button onClick={() => openPaymentModal(activeChat)} className="btn-primary !bg-green-600 hover:!bg-green-700 text-xs !py-2 px-4 shadow-lg shrink-0 flex items-center gap-1.5"><CreditCard size={16}/> Pay Now</button>
-                     </div>
+                    <div className="bg-green-50 dark:bg-green-900/30 border-b border-green-200 dark:border-green-700/50 p-3 px-5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-inner">
+                      <div>
+                        <p className="font-bold text-green-800 dark:text-green-400 flex items-center gap-1.5"><CheckCircle size={16} /> Seller Accepted Your Offer!</p>
+                        <p className="text-xs text-green-700 dark:text-green-500 font-medium mt-1">Complete payment to finalize your order.</p>
+                      </div>
+                      <button onClick={() => openPaymentModal(activeChat)} className="btn-primary !bg-green-600 hover:!bg-green-700 text-xs !py-2 px-4 shadow-lg shrink-0 flex items-center gap-1.5"><CreditCard size={16} /> Pay Now</button>
+                    </div>
                   )}
-                  
-                  <div ref={scrollRef} className="flex-grow p-5 overflow-y-auto space-y-4 custom-scrollbar">
-                     {activeChat?.messages.map((msg, i) => {
-                       const isMe = msg.senderId === user.id || msg.senderId === user._id;
-                       const isSystem = msg.text.startsWith("SYSTEM_ACTION:");
-                       
-                       if(isSystem) {
-                         if (msg.text.includes('MAKE_OFFER')) {
-                           const qtyM = msg.text.match(/QTY:(\d+)/);
-                           const priceM = msg.text.match(/PRICE:(\d+)/);
-                           return (
-                             <div key={i} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                               <div className={`max-w-[75%] p-3 px-4 rounded-xl shadow-sm ${isMe ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white dark:bg-dark-800 border border-blue-200 dark:border-blue-800 rounded-tl-none text-slate-800 dark:text-slate-200'}`}>
-                                 <p className="font-bold text-sm flex items-center gap-1.5"><ShoppingCart size={14}/> Formal Offer</p>
-                                 <p className="text-sm mt-1">Qty: <strong>{qtyM?.[1]} KG</strong> • Price: <strong>₹{priceM?.[1]}/kg</strong></p>
-                               </div>
-                             </div>
-                           );
-                         }
-                         if (msg.text.includes('OFFER_ACCEPTED')) {
-                           return (
-                             <div key={i} className="flex justify-center my-4">
-                                <span className="bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wider border border-green-200 dark:border-green-500/30">
-                                  🤝 Offer Accepted
-                                </span>
-                             </div>
-                           );
-                         }
-                         if (msg.text.includes('OFFER_DENIED')) {
-                           return (
-                             <div key={i} className="flex justify-center my-4">
-                                <span className="bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wider border border-red-200 dark:border-red-500/30">
-                                  ❌ Offer Denied
-                                </span>
-                             </div>
-                           );
-                         }
-                         if (msg.text.includes('RE_OFFER')) {
-                           const priceM = msg.text.match(/PRICE:(\d+)/);
-                           return (
-                             <div key={i} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                               <div className={`max-w-[75%] p-3 px-4 rounded-xl shadow-sm ${isMe ? 'bg-yellow-500 text-white rounded-tr-none' : 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-tl-none text-yellow-800 dark:text-yellow-300'}`}>
-                                 <p className="font-bold text-sm flex items-center gap-1.5">🏷️ {isMe ? 'You Re-offered' : 'Seller Re-offer'}</p>
-                                 <p className="text-sm mt-1">New Price: <strong>₹{priceM?.[1]}/kg</strong> — Interested?</p>
-                               </div>
-                             </div>
-                           );
-                         }
-                         return null;
-                       }
 
-                       return (
-                         <div key={i} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[75%] p-3.5 px-4 shadow-sm flex flex-col ${
-                              isMe ? 'bg-primary-600 text-white rounded-2xl rounded-tr-none' : 'bg-white dark:bg-dark-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-none text-slate-800 dark:text-slate-200'
-                            }`}>
-                               <span className="break-words font-medium">{msg.text}</span>
-                               <span className={`text-[9px] mt-1.5 font-bold tracking-widest uppercase ${isMe ? 'text-primary-200' : 'text-slate-400'} ${isMe ? 'text-right' : 'text-left'}`}>
-                                 {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                               </span>
+                  <div ref={scrollRef} className="flex-grow p-5 overflow-y-auto space-y-4 custom-scrollbar">
+                    {activeChat?.messages.map((msg, i) => {
+                      const isMe = msg.senderId === user.id || msg.senderId === user._id;
+                      const isSystem = msg.text.startsWith("SYSTEM_ACTION:");
+
+                      if (isSystem) {
+                        if (msg.text.includes('MAKE_OFFER')) {
+                          const qtyM = msg.text.match(/QTY:(\d+)/);
+                          const priceM = msg.text.match(/PRICE:(\d+)/);
+                          return (
+                            <div key={i} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                              <div className={`max-w-[75%] p-3 px-4 rounded-xl shadow-sm ${isMe ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white dark:bg-dark-800 border border-blue-200 dark:border-blue-800 rounded-tl-none text-slate-800 dark:text-slate-200'}`}>
+                                <p className="font-bold text-sm flex items-center gap-1.5"><ShoppingCart size={14} /> Formal Offer</p>
+                                <p className="text-sm mt-1">Qty: <strong>{qtyM?.[1]} KG</strong> • Price: <strong>₹{priceM?.[1]}/kg</strong></p>
+                              </div>
                             </div>
-                         </div>
-                       )
-                     })}
+                          );
+                        }
+                        if (msg.text.includes('OFFER_ACCEPTED')) {
+                          return (
+                            <div key={i} className="flex justify-center my-4">
+                              <span className="bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wider border border-green-200 dark:border-green-500/30">
+                                🤝 Offer Accepted
+                              </span>
+                            </div>
+                          );
+                        }
+                        if (msg.text.includes('OFFER_DENIED')) {
+                          return (
+                            <div key={i} className="flex justify-center my-4">
+                              <span className="bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wider border border-red-200 dark:border-red-500/30">
+                                ❌ Offer Denied
+                              </span>
+                            </div>
+                          );
+                        }
+                        if (msg.text.includes('RE_OFFER')) {
+                          const priceM = msg.text.match(/PRICE:(\d+)/);
+                          return (
+                            <div key={i} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                              <div className={`max-w-[75%] p-3 px-4 rounded-xl shadow-sm ${isMe ? 'bg-yellow-500 text-white rounded-tr-none' : 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-tl-none text-yellow-800 dark:text-yellow-300'}`}>
+                                <p className="font-bold text-sm flex items-center gap-1.5">🏷️ {isMe ? 'You Re-offered' : 'Seller Re-offer'}</p>
+                                <p className="text-sm mt-1">New Price: <strong>₹{priceM?.[1]}/kg</strong> — Interested?</p>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }
+
+                      return (
+                        <div key={i} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[75%] p-3.5 px-4 shadow-sm flex flex-col ${isMe ? 'bg-primary-600 text-white rounded-2xl rounded-tr-none' : 'bg-white dark:bg-dark-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-none text-slate-800 dark:text-slate-200'
+                            }`}>
+                            <span className="break-words font-medium">{msg.text}</span>
+                            <div className={`flex items-center gap-1.5 mt-1.5 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                              <span className={`text-[9px] font-bold tracking-widest uppercase ${isMe ? 'text-primary-200' : 'text-slate-400'}`}>
+                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              {isMe && <span title="WhatsApp Notification Delivered" className="text-[9px] font-bold tracking-wider text-green-300 flex items-center gap-0.5 bg-green-500/20 px-1 rounded"><CheckCircle size={9} /> WA Sent</span>}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                  
+
                   <div className="p-4 bg-white dark:bg-dark-800 border-t border-slate-200 dark:border-slate-700/50">
                     <form onSubmit={handleSendMessage} className="relative flex items-center gap-2">
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         required
-                        placeholder="Type your message or bid..." 
+                        placeholder="Type your message or bid..."
                         value={liveMessage}
                         onChange={e => setLiveMessage(e.target.value)}
-                        className="w-full bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200 rounded-full py-3 px-5 pr-14 outline-none focus:ring-2 focus:ring-primary-500 font-medium tracking-wide shadow-inner" 
+                        className="w-full bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200 rounded-full py-3 px-5 pr-14 outline-none focus:ring-2 focus:ring-primary-500 font-medium tracking-wide shadow-inner"
                       />
                       <button type="submit" disabled={!liveMessage.trim()} className="absolute right-1.5 w-10 h-10 rounded-full bg-primary-500/90 text-white flex items-center justify-center disabled:opacity-50 hover:bg-primary-600 transition-colors shadow-lg shadow-primary-500/30">
                         <Send size={16} className="-ml-1" />
@@ -840,28 +988,28 @@ const Dashboard = () => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white dark:bg-dark-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="bg-gradient-to-r from-green-600 to-primary-600 p-5 text-white">
-              <h3 className="text-xl font-bold flex items-center gap-2"><CreditCard size={20}/> Secure Payment</h3>
+              <h3 className="text-xl font-bold flex items-center gap-2"><CreditCard size={20} /> Secure Payment</h3>
               <p className="text-sm mt-1 text-white/80">Complete payment to finalize your order</p>
             </div>
             <div className="p-6 space-y-4">
               <div className="flex gap-2 mb-4">
-                <button onClick={() => setPaymentForm({...paymentForm, method: 'card'})} className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-all ${paymentForm.method === 'card' ? 'bg-primary-50 border-primary-500 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>💳 Card</button>
-                <button onClick={() => setPaymentForm({...paymentForm, method: 'upi'})} className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-all ${paymentForm.method === 'upi' ? 'bg-primary-50 border-primary-500 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>📲 UPI</button>
+                <button onClick={() => setPaymentForm({ ...paymentForm, method: 'card' })} className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-all ${paymentForm.method === 'card' ? 'bg-primary-50 border-primary-500 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>💳 Card</button>
+                <button onClick={() => setPaymentForm({ ...paymentForm, method: 'upi' })} className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-all ${paymentForm.method === 'upi' ? 'bg-primary-50 border-primary-500 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400' : 'border-slate-200 dark:border-slate-700 text-slate-500'}`}>📲 UPI</button>
               </div>
               {paymentForm.method === 'card' ? (
                 <div className="space-y-3">
-                  <input type="text" maxLength="19" placeholder="Card Number (e.g. 4111 1111 1111 1111)" value={paymentForm.cardNumber} onChange={e => setPaymentForm({...paymentForm, cardNumber: e.target.value})} className="input-field !text-sm" />
+                  <input type="text" maxLength="19" placeholder="Card Number (e.g. 4111 1111 1111 1111)" value={paymentForm.cardNumber} onChange={e => setPaymentForm({ ...paymentForm, cardNumber: e.target.value })} className="input-field !text-sm" />
                   <div className="grid grid-cols-2 gap-3">
-                    <input type="text" maxLength="5" placeholder="MM/YY" value={paymentForm.expiry} onChange={e => setPaymentForm({...paymentForm, expiry: e.target.value})} className="input-field !text-sm" />
-                    <input type="text" maxLength="3" placeholder="CVV" value={paymentForm.cvv} onChange={e => setPaymentForm({...paymentForm, cvv: e.target.value})} className="input-field !text-sm" />
+                    <input type="text" maxLength="5" placeholder="MM/YY" value={paymentForm.expiry} onChange={e => setPaymentForm({ ...paymentForm, expiry: e.target.value })} className="input-field !text-sm" />
+                    <input type="text" maxLength="3" placeholder="CVV" value={paymentForm.cvv} onChange={e => setPaymentForm({ ...paymentForm, cvv: e.target.value })} className="input-field !text-sm" />
                   </div>
                 </div>
               ) : (
-                <input type="text" placeholder="Enter UPI ID (e.g. name@upi)" value={paymentForm.upiId} onChange={e => setPaymentForm({...paymentForm, upiId: e.target.value})} className="input-field !text-sm" />
+                <input type="text" placeholder="Enter UPI ID (e.g. name@upi)" value={paymentForm.upiId} onChange={e => setPaymentForm({ ...paymentForm, upiId: e.target.value })} className="input-field !text-sm" />
               )}
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowPaymentModal(false)} className="flex-1 btn-secondary py-2.5 font-bold">Cancel</button>
-                <button onClick={handleConfirmPayment} className="flex-1 btn-primary py-2.5 font-bold !bg-green-600 hover:!bg-green-700 flex items-center justify-center gap-2"><CheckCircle size={16}/> Confirm Payment</button>
+                <button onClick={handleConfirmPayment} className="flex-1 btn-primary py-2.5 font-bold !bg-green-600 hover:!bg-green-700 flex items-center justify-center gap-2"><CheckCircle size={16} /> Confirm Payment</button>
               </div>
             </div>
           </motion.div>

@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { IndianRupee, MapPin, Send, MessageCircle, AlertCircle, CheckCircle, Scale, ShoppingCart, CalendarDays, User, History, Tag } from 'lucide-react';
+import { CartContext } from '../context/CartContext';
+import { IndianRupee, MapPin, Send, MessageCircle, AlertCircle, CheckCircle, Scale, ShoppingCart, CalendarDays, User, History, Tag, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import apiService from '../services/api';
 
 const ProductDetail = () => {
   const { id } = useParams();
   const { user, isAuthenticated } = useContext(AuthContext);
+  const { addToCart } = useContext(CartContext);
   const navigate = useNavigate();
 
   const [product, setProduct] = useState(null);
@@ -149,7 +151,7 @@ const ProductDetail = () => {
       }
 
       // Send structured offer message that Dashboard can parse
-      const offerText = `SYSTEM_ACTION:MAKE_OFFER|QTY:${qty}|PRICE:${price}`;
+      const offerText = `SYSTEM_ACTION:MAKE_OFFER|QTY:${qty}|PRICE:${price}|CONTACT:${user.contactNumber || 'Not provided'}`;
       const { data } = await apiService.sendMessage(currentChatId, offerText);
       setChat(data.messages);
 
@@ -174,21 +176,35 @@ const ProductDetail = () => {
         <div className="lg:col-span-2 space-y-4">
            {/* Theater Image/Video Box */}
            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-black/95 flex overflow-x-auto snap-x snap-mandatory flex-nowrap items-center h-[28rem] rounded-xl relative shadow-lg custom-scrollbar">
-             {product.media && product.media.length > 0 ? (
-                product.media.map((m, idx) => (
+             {(() => {
+                const mediaItems = product.media && product.media.length > 0 ? product.media : [];
+                const isVideo = (path) => /\.(mp4|webm|ogg)$/i.test(path) || path.includes('mp4') || path.includes('video');
+                // Sort: photos first, then videos
+                const sorted = [...mediaItems].sort((a, b) => (isVideo(a) ? 1 : 0) - (isVideo(b) ? 1 : 0));
+                const formatUrl = (path) => path.startsWith('http') ? path : `http://localhost:5000${path}`;
+
+                if (sorted.length === 0) {
+                  return (
+                    <div className="w-full shrink-0 h-full flex justify-center items-center">
+                      <img src={product.image || `https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=1000&q=80`} alt={product.name} className="h-full object-contain" />
+                    </div>
+                  );
+                }
+
+                return sorted.map((m, idx) => (
                   <div key={idx} className="w-full shrink-0 h-full flex justify-center items-center snap-center relative">
-                    {m.match(/\.(mp4|webm|ogg)$/i) ? (
-                      <video src={`http://localhost:5000${m}`} controls className="h-full object-contain w-full" />
+                    {isVideo(m) ? (
+                      <video src={formatUrl(m)} controls className="h-full object-contain w-full" />
                     ) : (
-                      <img src={m.startsWith('http') ? m : `http://localhost:5000${m}`} alt={product.name} className="h-full object-contain" />
+                      <img src={formatUrl(m)} alt={product.name} className="h-full object-contain" />
                     )}
+                    {/* Slide type label */}
+                    <span className={`absolute top-3 right-3 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full backdrop-blur-sm shadow-md z-10 ${isVideo(m) ? 'bg-purple-600/80 text-white' : 'bg-blue-600/80 text-white'}`}>
+                      {isVideo(m) ? '🎥 Video' : '📸 Photo'} {idx + 1}/{sorted.length}
+                    </span>
                   </div>
-                ))
-             ) : (
-                <div className="w-full shrink-0 h-full flex justify-center items-center">
-                  <img src={product.image || `https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=1000&q=80`} alt={product.name} className="h-full object-contain" />
-                </div>
-             )}
+                ));
+             })()}
              
              <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/80 to-transparent pointer-events-none z-0"></div>
              <div className="absolute bottom-4 left-4 flex gap-2 z-10 w-full pr-8 flex-wrap">
@@ -285,11 +301,11 @@ const ProductDetail = () => {
                      </div>
                    )}
                  </div>
-               ) : (
-                 /* Buyer: Make Offer Box */
+               ) : user?.role === 'buyer' ? (
+                 /* Buyer: Make Offer Box or Add to Cart */
                  <>
                    <div className="bg-slate-50 dark:bg-dark-900 border border-slate-200 dark:border-slate-700 p-4 rounded-xl mb-4">
-                      <h3 className="font-bold text-sm text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2"><ShoppingCart size={16}/> Make an Offer</h3>
+                      <h3 className="font-bold text-sm text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2"><ShoppingCart size={16}/> Buy / Make Offer</h3>
                       <div className="grid grid-cols-2 gap-2 mb-3">
                         <div>
                           <label className="text-xs font-semibold text-slate-500 block mb-1">Qty (KG)</label>
@@ -304,13 +320,32 @@ const ProductDetail = () => {
                           <input type="number" value={checkoutPrice} onChange={e=>setCheckoutPrice(e.target.value)} className="w-full bg-white dark:bg-dark-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1.5 text-sm font-bold text-slate-900 dark:text-white" />
                         </div>
                       </div>
-                      <button onClick={handleMakeOffer} className="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">
-                        <Send size={16}/> Send Offer to Seller
-                      </button>
-                      {!isAuthenticated && <p className="text-xs text-red-400 mt-2 text-center font-medium">You must be logged in to make an offer</p>}
+                      <div className="flex flex-col gap-2">
+                        <button 
+                          onClick={() => {
+                            if (!isAuthenticated) return navigate('/auth');
+                            if (!quantity || quantity <= 0) return alert('Enter valid quantity');
+                            addToCart(product, quantity);
+                          }} 
+                          className="w-full btn-primary py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                          <Plus size={16}/> Add to Cart (₹{product.price}/kg)
+                        </button>
+                        
+                        <div className="relative flex py-2 items-center">
+                          <div className="flex-grow border-t border-slate-300 dark:border-slate-600"></div>
+                          <span className="flex-shrink-0 mx-4 text-slate-400 text-xs text-bold">OR</span>
+                          <div className="flex-grow border-t border-slate-300 dark:border-slate-600"></div>
+                        </div>
+
+                        <button onClick={handleMakeOffer} className="w-full bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">
+                          <Send size={16}/> Send Offer to Seller
+                        </button>
+                      </div>
+                      {!isAuthenticated && <p className="text-xs text-red-400 mt-2 text-center font-medium">You must be logged in to buy or offer</p>}
                    </div>
                  </>
-               )}
+               ) : null}
 
                {/* Live Historical Action Board */}
                {product.lastNegotiatedPrice ? (

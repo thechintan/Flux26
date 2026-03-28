@@ -82,15 +82,31 @@ const Home = () => {
             onClick={() => handleAction(product._id)}
           >
             <div className="relative overflow-hidden h-48">
-              {product.media && product.media.length > 0 ? (
-                product.media[0].match(/\.(mp4|webm|ogg)$/i) ? (
-                  <video src={`http://localhost:5000${product.media[0]}`} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                ) : (
-                  <img src={product.media[0].startsWith('http') ? product.media[0] : `http://localhost:5000${product.media[0]}`} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                )
-              ) : (
-                <img src={product.image || `https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&q=80`} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-              )}
+              {(() => {
+                const mediaItems = product.media || [];
+                // Support both direct URLs (like unsplash/google) and local backend paths
+                const isVideo = (path) => /\.(mp4|webm|ogg)$/i.test(path) || path.includes('mp4') || path.includes('video');
+                
+                const videoUrl = mediaItems.find(m => isVideo(m)) || null;
+                const imageUrl = mediaItems.find(m => !isVideo(m)) || product.image || `https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=500&q=80`;
+                
+                const formatUrl = (path) => path.startsWith('http') ? path : `http://localhost:5000${path}`;
+                
+                return (
+                  <div className="w-full h-full relative group-hover:scale-110 transition-transform duration-500 flex">
+                     <div className="relative h-full" style={{ width: videoUrl ? '50%' : '100%' }}>
+                       <img src={formatUrl(imageUrl)} alt={product.name} className="h-full w-full object-cover" />
+                       {videoUrl && <span className="absolute bottom-1 left-1 text-[8px] font-extrabold bg-blue-600/80 text-white px-1.5 py-0.5 rounded-full backdrop-blur-sm">📸 Photo</span>}
+                     </div>
+                     {videoUrl && (
+                       <div className="relative h-full w-1/2 border-l border-white/20">
+                         <video src={formatUrl(videoUrl)} autoPlay loop muted playsInline className="h-full w-full object-cover" />
+                         <span className="absolute bottom-1 left-1 text-[8px] font-extrabold bg-purple-600/80 text-white px-1.5 py-0.5 rounded-full backdrop-blur-sm">🎥 Video</span>
+                       </div>
+                     )}
+                  </div>
+                );
+              })()}
               
               <div className="absolute top-3 right-3 badge bg-white/90 dark:bg-dark-900/80 backdrop-blur-sm px-3 py-1 text-sm text-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 font-bold tracking-wider rounded-lg">
                 {product.quantity} KG Available
@@ -98,7 +114,7 @@ const Home = () => {
               
               {product.isDamaged && (
                  <div className="absolute top-3 left-3 badge bg-red-500/90 text-white backdrop-blur-sm px-3 py-1 text-xs border border-red-400 font-bold tracking-wider rounded-lg flex items-center gap-1 shadow-lg">
-                   <AlertTriangle size={14} /> Damaged / Discount
+                   <AlertTriangle size={14} /> Damaged / Unsold
                  </div>
               )}
               
@@ -131,18 +147,29 @@ const Home = () => {
                 </div>
               </div>
 
-              <button 
-                onClick={(e) => { e.stopPropagation(); handleAction(product._id); }}
-                className={`mt-5 w-full flex justify-center items-center gap-2 group-hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] ${
-                  (user?.role === 'farmer' && (product.farmer?._id === user?.id || product.farmer?._id === user?._id || product.farmer === user?.id || product.farmer === user?._id))
-                    ? 'btn-secondary border-2 border-yellow-400 text-yellow-700 hover:bg-yellow-50'
-                    : 'btn-primary'
-                }`}
-              >
-                {(user?.role === 'farmer' && (product.farmer?._id === user?.id || product.farmer?._id === user?._id || product.farmer === user?.id || product.farmer === user?._id))
-                  ? <><History size={18} /> Sold History</>
-                  : <><MessageCircle size={18} /> Buy / Negotiate</>}
-              </button>
+              {/* Action Buttons */}
+              {(!user || user?.role === 'buyer') ? (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleAction(product._id); }}
+                  className="mt-5 w-full flex justify-center items-center gap-2 btn-primary group-hover:shadow-[0_0_20px_rgba(34,197,94,0.4)]"
+                >
+                  <ShoppingCart size={18} /> View & Buy
+                </button>
+              ) : (user?.role === 'farmer' && (product.farmer?._id === user?.id || product.farmer?._id === user?._id || product.farmer === user?.id || product.farmer === user?._id)) ? (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleAction(product._id); }}
+                  className="mt-5 w-full flex justify-center items-center gap-2 btn-secondary border-2 border-yellow-400 text-yellow-700 hover:bg-yellow-50 group-hover:shadow-[0_0_20px_rgba(34,197,94,0.4)]"
+                >
+                  <History size={18} /> Sold History
+                </button>
+              ) : (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleAction(product._id); }}
+                  className="mt-5 w-full flex justify-center items-center gap-2 btn-secondary border-slate-300 text-slate-500 opacity-70"
+                >
+                  View Only
+                </button>
+              )}
             </div>
           </motion.div>
         ))}

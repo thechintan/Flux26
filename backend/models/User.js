@@ -6,7 +6,16 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['farmer', 'buyer'], required: true },
-  location: { type: String, default: '' }
+  location: { type: String, default: '' },
+  contactNumber: { type: String, default: '' },
+  averageRating: { type: Number, default: 0 },
+  ratings: [{
+    rating: { type: Number, required: true },
+    comment: { type: String },
+    byUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
+    createdAt: { type: Date, default: Date.now }
+  }]
 }, { timestamps: true });
 
 UserSchema.pre('save', async function () {
